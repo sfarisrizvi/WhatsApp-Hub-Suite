@@ -110,7 +110,7 @@ export default function Contacts() {
     reader.readAsText(file);
   };
 
-  const allTags = [...new Set(contacts.flatMap(c => c.tags || []))];
+  const allTags = Array.from(new Set(contacts.flatMap(c => c.tags || [])));
   const filtered = contacts.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.phone.includes(search)) return false;
     if (filterTag && !(c.tags || []).includes(filterTag)) return false;

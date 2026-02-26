@@ -91,7 +91,7 @@ export default function Campaigns() {
     });
   };
 
-  const allTags = [...new Set(contacts.flatMap(c => c.tags || []))];
+  const allTags = Array.from(new Set(contacts.flatMap(c => c.tags || [])));
 
   const getStatusColor = (status: string) => {
     switch (status) {

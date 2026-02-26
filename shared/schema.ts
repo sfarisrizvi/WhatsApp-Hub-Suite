@@ -1,18 +1,250 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+export * from "./models/auth";
+
+import { sql, relations } from "drizzle-orm";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { users } from "./models/auth";
 
-export const users = pgTable("users", {
+export const roleEnum = pgEnum("role", ["admin", "agent", "viewer"]);
+export const conversationStatusEnum = pgEnum("conversation_status", ["open", "pending", "closed"]);
+export const dealStageEnum = pgEnum("deal_stage", ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]);
+export const campaignStatusEnum = pgEnum("campaign_status", ["draft", "scheduled", "sending", "sent", "failed"]);
+export const orderStatusEnum = pgEnum("order_status", ["pending", "confirmed", "shipped", "delivered", "cancelled"]);
+export const templateStatusEnum = pgEnum("template_status", ["draft", "approved", "rejected"]);
+
+export const containers = pgTable("containers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  name: text("name").notNull(),
+  phoneNumber: text("phone_number"),
+  businessName: text("business_name"),
+  apiKey: text("api_key"),
+  apiEndpoint: text("api_endpoint"),
+  isConfigured: boolean("is_configured").default(false),
+  ownerId: varchar("owner_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const containerMembers = pgTable("container_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  role: roleEnum("role").notNull().default("agent"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const contacts = pgTable("contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email"),
+  avatarUrl: text("avatar_url"),
+  tags: text("tags").array().default(sql`'{}'::text[]`),
+  customFields: jsonb("custom_fields").default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const templates = pgTable("templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  category: text("category").notNull().default("marketing"),
+  body: text("body").notNull(),
+  headerType: text("header_type"),
+  headerContent: text("header_content"),
+  footerText: text("footer_text"),
+  variables: text("variables").array().default(sql`'{}'::text[]`),
+  status: templateStatusEnum("status").default("draft"),
+  isPremade: boolean("is_premade").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const campaigns = pgTable("campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  templateId: varchar("template_id").references(() => templates.id),
+  targetTags: text("target_tags").array().default(sql`'{}'::text[]`),
+  scheduledAt: timestamp("scheduled_at"),
+  status: campaignStatusEnum("status").default("draft"),
+  totalRecipients: integer("total_recipients").default(0),
+  delivered: integer("delivered").default(0),
+  read: integer("read").default(0),
+  replied: integer("replied").default(0),
+  failed: integer("failed").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const automationRules = pgTable("automation_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  trigger: text("trigger"),
+  responseText: text("response_text").notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const conversations = pgTable("conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  status: conversationStatusEnum("status").default("open"),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id"),
+  content: text("content").notNull(),
+  isFromContact: boolean("is_from_contact").default(false),
+  isInternalNote: boolean("is_internal_note").default(false),
+  mediaUrl: text("media_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const deals = pgTable("deals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").references(() => contacts.id),
+  title: text("title").notNull(),
+  value: integer("value").default(0),
+  stage: dealStageEnum("stage").default("lead"),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const orders = pgTable("orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").references(() => contacts.id),
+  orderNumber: text("order_number").notNull(),
+  items: jsonb("items").default([]),
+  totalAmount: integer("total_amount").default(0),
+  status: orderStatusEnum("status").default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  containerId: varchar("container_id").references(() => containers.id),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  type: text("type").notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  ownedContainers: many(containers),
+  memberships: many(containerMembers),
+  notifications: many(notifications),
+}));
+
+export const containersRelations = relations(containers, ({ one, many }) => ({
+  owner: one(users, { fields: [containers.ownerId], references: [users.id] }),
+  members: many(containerMembers),
+  contacts: many(contacts),
+  templates: many(templates),
+  campaigns: many(campaigns),
+  automationRules: many(automationRules),
+  conversations: many(conversations),
+  deals: many(deals),
+  orders: many(orders),
+}));
+
+export const containerMembersRelations = relations(containerMembers, ({ one }) => ({
+  container: one(containers, { fields: [containerMembers.containerId], references: [containers.id] }),
+  user: one(users, { fields: [containerMembers.userId], references: [users.id] }),
+}));
+
+export const contactsRelations = relations(contacts, ({ one, many }) => ({
+  container: one(containers, { fields: [contacts.containerId], references: [containers.id] }),
+  conversations: many(conversations),
+  deals: many(deals),
+  orders: many(orders),
+}));
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  container: one(containers, { fields: [conversations.containerId], references: [containers.id] }),
+  contact: one(contacts, { fields: [conversations.contactId], references: [contacts.id] }),
+  assignee: one(users, { fields: [conversations.assignedTo], references: [users.id] }),
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, { fields: [messages.conversationId], references: [conversations.id] }),
+}));
+
+export const dealsRelations = relations(deals, ({ one }) => ({
+  container: one(containers, { fields: [deals.containerId], references: [containers.id] }),
+  contact: one(contacts, { fields: [deals.contactId], references: [contacts.id] }),
+  assignee: one(users, { fields: [deals.assignedTo], references: [users.id] }),
+}));
+
+export const ordersRelations = relations(orders, ({ one }) => ({
+  container: one(containers, { fields: [orders.containerId], references: [containers.id] }),
+  contact: one(contacts, { fields: [orders.contactId], references: [contacts.id] }),
+}));
+
+export const templatesRelations = relations(templates, ({ one }) => ({
+  container: one(containers, { fields: [templates.containerId], references: [containers.id] }),
+}));
+
+export const campaignsRelations = relations(campaigns, ({ one }) => ({
+  container: one(containers, { fields: [campaigns.containerId], references: [containers.id] }),
+  template: one(templates, { fields: [campaigns.templateId], references: [templates.id] }),
+}));
+
+export const automationRulesRelations = relations(automationRules, ({ one }) => ({
+  container: one(containers, { fields: [automationRules.containerId], references: [containers.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
+  container: one(containers, { fields: [notifications.containerId], references: [containers.id] }),
+}));
+
+// Insert schemas
+export const insertContainerSchema = createInsertSchema(containers).omit({ id: true, createdAt: true });
+export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, createdAt: true });
+export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true });
+export const insertCampaignSchema = createInsertSchema(campaigns).omit({ id: true, createdAt: true });
+export const insertAutomationRuleSchema = createInsertSchema(automationRules).omit({ id: true, createdAt: true });
+export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true, lastMessageAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
+export const insertDealSchema = createInsertSchema(deals).omit({ id: true, createdAt: true });
+export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export const insertContainerMemberSchema = createInsertSchema(containerMembers).omit({ id: true, createdAt: true });
+
+// Types
+export type Container = typeof containers.$inferSelect;
+export type InsertContainer = z.infer<typeof insertContainerSchema>;
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = z.infer<typeof insertContactSchema>;
+export type Template = typeof templates.$inferSelect;
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type Campaign = typeof campaigns.$inferSelect;
+export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
+export type AutomationRule = typeof automationRules.$inferSelect;
+export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Deal = typeof deals.$inferSelect;
+export type InsertDeal = z.infer<typeof insertDealSchema>;
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type ContainerMember = typeof containerMembers.$inferSelect;
+export type InsertContainerMember = z.infer<typeof insertContainerMemberSchema>;

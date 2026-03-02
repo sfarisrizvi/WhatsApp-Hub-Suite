@@ -21,6 +21,7 @@ import type { Notification } from "@shared/schema";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
+import AuthPage from "@/pages/auth";
 import Dashboard from "@/pages/dashboard";
 import Inbox from "@/pages/inbox";
 import Contacts from "@/pages/contacts";
@@ -135,7 +136,12 @@ function AppRouter() {
   }
 
   if (!user) {
-    return <Landing />;
+    return (
+      <Switch>
+        <Route path="/auth" component={AuthPage} />
+        <Route><Landing /></Route>
+      </Switch>
+    );
   }
 
   return <AuthenticatedApp />;

@@ -6,7 +6,7 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 ## Architecture
 - **Frontend**: React SPA with Vite, Tailwind CSS, Shadcn UI, Recharts
 - **Backend**: Express.js REST API with PostgreSQL (Drizzle ORM)
-- **Auth**: Replit Auth (OpenID Connect)
+- **Auth**: Email/password authentication with bcrypt + express-session (PostgreSQL-backed)
 - **Real-time**: WebSocket (ws) for notifications
 - **Routing**: wouter (client-side)
 - **WhatsApp**: Meta Cloud API (v18.0) with webhook support
@@ -51,6 +51,7 @@ client/src/
     app-sidebar.tsx    - Sidebar navigation with container switcher
     ui/                - Shadcn UI components
   pages/
+    auth.tsx           - Login/Register page (email + password)
     landing.tsx        - Public landing page
     dashboard.tsx      - Dashboard overview
     inbox.tsx          - Team inbox with messaging
@@ -77,7 +78,7 @@ server/
   storage.ts           - DatabaseStorage with all CRUD operations
   db.ts                - Drizzle + pg pool
   seed.ts              - Seed data for new users
-  replit_integrations/auth/ - Replit Auth module
+  replit_integrations/auth/ - Email/password auth module (session, routes, storage)
 
 shared/
   schema.ts            - All Drizzle schemas, relations, types
@@ -85,7 +86,7 @@ shared/
 ```
 
 ## Database Tables
-users, sessions, containers (with phoneNumberId, wabaId, appSecret, webhookVerifyToken), container_members, contacts, templates, campaigns, automation_rules, conversations, messages (with whatsappMessageId), deals, orders, notifications
+users (with email, username, password), sessions, containers (with phoneNumberId, wabaId, appSecret, webhookVerifyToken), container_members, contacts, templates, campaigns, automation_rules, conversations, messages (with whatsappMessageId), deals, orders, notifications
 
 ## API Endpoints (WhatsApp-specific)
 - GET /api/webhook - Meta webhook verification handshake
@@ -94,8 +95,13 @@ users, sessions, containers (with phoneNumberId, wabaId, appSecret, webhookVerif
 - GET /api/whatsapp/app-config - Public Meta App ID + Config ID for FB SDK
 - POST /api/whatsapp/embedded-signup - OAuth token exchange + auto-configure container
 
+## API Endpoints (Auth)
+- POST /api/auth/register - Create account (email, username, password)
+- POST /api/auth/login - Sign in (email, password)
+- POST /api/logout - Sign out (destroy session)
+- GET /api/auth/user - Get current user (requires session)
+
 ## Environment Variables
 - DATABASE_URL (auto-provisioned)
 - SESSION_SECRET
 - META_APP_ID, META_APP_SECRET, META_CONFIG_ID (Meta Embedded Signup)
-- REPL_ID, ISSUER_URL (Replit Auth)

@@ -24,7 +24,7 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <a href="#features" className="text-sm text-muted-foreground transition-colors" data-testid="link-features">Features</a>
-            <a href="/api/login" data-testid="button-login">
+            <a href="/auth" data-testid="button-login">
               <Button size="sm">Get Started</Button>
             </a>
           </div>
@@ -48,7 +48,7 @@ export default function Landing() {
                 and grow your business through WhatsApp. Built for teams of all sizes.
               </p>
               <div className="flex items-center gap-3 flex-wrap">
-                <a href="/api/login" data-testid="button-hero-cta">
+                <a href="/auth" data-testid="button-hero-cta">
                   <Button size="lg" className="text-base">
                     Start Free Today
                   </Button>

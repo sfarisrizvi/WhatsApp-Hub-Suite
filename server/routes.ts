@@ -53,7 +53,7 @@ export async function registerRoutes(
   // Containers
   app.get("/api/containers", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId!;
       await seedDatabase(userId);
       const result = await storage.getContainersByUser(userId);
       res.json(result);
@@ -62,7 +62,7 @@ export async function registerRoutes(
 
   app.post("/api/containers", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId!;
       const container = await storage.createContainer({ ...req.body, ownerId: userId });
       res.json(container);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -278,7 +278,7 @@ export async function registerRoutes(
 
   app.post("/api/conversations/:conversationId/messages", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId!;
       const conv = await storage.getConversation(req.params.conversationId);
       if (!conv) return res.status(404).json({ message: "Conversation not found" });
 
@@ -386,7 +386,7 @@ export async function registerRoutes(
   // Notifications
   app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId!;
       const result = await storage.getNotifications(userId);
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -394,7 +394,7 @@ export async function registerRoutes(
 
   app.post("/api/notifications/read-all", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId!;
       await storage.markAllNotificationsRead(userId);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -575,7 +575,7 @@ export async function registerRoutes(
   // WhatsApp Embedded Signup - OAuth token exchange and auto-configuration
   app.post("/api/whatsapp/embedded-signup", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId!;
       const { code, phoneNumberId, wabaId, containerId } = req.body;
 
       if (!code) {

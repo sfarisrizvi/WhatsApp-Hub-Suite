@@ -1,9 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
+import { containers, contacts, conversations } from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 
 const wsClients = new Map<string, Set<WebSocket>>();
 
@@ -275,15 +279,52 @@ export async function registerRoutes(
   app.post("/api/conversations/:conversationId/messages", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const message = await storage.createMessage({
+      const conv = await storage.getConversation(req.params.conversationId);
+      if (!conv) return res.status(404).json({ message: "Conversation not found" });
+
+      const messageData: any = {
         ...req.body,
         conversationId: req.params.conversationId,
         senderId: req.body.isInternalNote ? userId : req.body.senderId || userId,
-      });
+      };
 
-      // Broadcast via WebSocket
-      const conv = await storage.getConversation(req.params.conversationId);
-      if (conv && conv.assignedTo && conv.assignedTo !== userId) {
+      if (!req.body.isInternalNote && !req.body.isFromContact) {
+        const container = await storage.getContainer(conv.containerId);
+        if (container?.isConfigured && container.phoneNumberId && container.apiKey) {
+          const contact = await storage.getContact(conv.contactId);
+          if (contact) {
+            try {
+              const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
+              const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}/messages`;
+              const recipientPhone = contact.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "");
+              const waRes = await fetch(url, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${container.apiKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  messaging_product: "whatsapp",
+                  recipient_type: "individual",
+                  to: recipientPhone,
+                  type: "text",
+                  text: { preview_url: false, body: req.body.content },
+                }),
+              });
+              const waData = await waRes.json();
+              if (waData.messages?.[0]?.id) {
+                messageData.whatsappMessageId = waData.messages[0].id;
+              }
+            } catch (waErr: any) {
+              console.error("WhatsApp API error:", waErr.message);
+            }
+          }
+        }
+      }
+
+      const message = await storage.createMessage(messageData);
+
+      if (conv.assignedTo && conv.assignedTo !== userId) {
         broadcastToUser(conv.assignedTo, { type: 'new_message', message, conversationId: conv.id });
       }
 
@@ -364,6 +405,160 @@ export async function registerRoutes(
       await storage.markNotificationRead(req.params.id);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // WhatsApp Webhook Verification (GET)
+  app.get("/api/webhook", async (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && token) {
+      const allContainers = await db.select().from(containers);
+      const match = allContainers.find(c => c.webhookVerifyToken === token);
+      if (match) {
+        console.log("Webhook verified for container:", match.id);
+        return res.status(200).send(challenge);
+      }
+    }
+    res.status(403).send("Forbidden");
+  });
+
+  // WhatsApp Webhook Incoming Messages (POST)
+  app.post("/api/webhook", async (req, res) => {
+    try {
+      const signature = req.headers["x-hub-signature-256"] as string | undefined;
+      const body = req.body;
+
+      if (body.object !== "whatsapp_business_account") {
+        return res.status(400).json({ message: "Invalid object type" });
+      }
+
+      for (const entry of body.entry || []) {
+        const wabaId = entry.id;
+        const [container] = await db.select().from(containers)
+          .where(eq(containers.wabaId, wabaId));
+        if (!container) continue;
+
+        if (container.appSecret) {
+          if (!signature) {
+            console.warn("Webhook missing signature for container:", container.id);
+            continue;
+          }
+          const rawBody = (req as any).rawBody
+            ? Buffer.from((req as any).rawBody)
+            : Buffer.from(JSON.stringify(body));
+          const expected = "sha256=" + crypto
+            .createHmac("sha256", container.appSecret)
+            .update(rawBody)
+            .digest("hex");
+          try {
+            if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+              console.warn("Webhook signature mismatch for container:", container.id);
+              continue;
+            }
+          } catch {
+            console.warn("Webhook signature validation error for container:", container.id);
+            continue;
+          }
+        }
+
+        for (const change of entry.changes || []) {
+          if (change.field !== "messages") continue;
+          const value = change.value;
+          if (!value?.messages) continue;
+
+          for (const msg of value.messages) {
+            if (msg.type !== "text") continue;
+            const senderPhone = msg.from;
+            const messageBody = msg.text?.body;
+            if (!senderPhone || !messageBody) continue;
+
+            let [contact] = await db.select().from(contacts)
+              .where(and(
+                eq(contacts.containerId, container.id),
+                eq(contacts.phone, senderPhone)
+              ));
+
+            if (!contact) {
+              const senderName = value.contacts?.[0]?.profile?.name || senderPhone;
+              [contact] = await db.insert(contacts).values({
+                containerId: container.id,
+                name: senderName,
+                phone: senderPhone,
+              }).returning();
+            }
+
+            let [conv] = await db.select().from(conversations)
+              .where(and(
+                eq(conversations.containerId, container.id),
+                eq(conversations.contactId, contact.id)
+              ));
+
+            if (!conv) {
+              [conv] = await db.insert(conversations).values({
+                containerId: container.id,
+                contactId: contact.id,
+                status: "open",
+              }).returning();
+            }
+
+            const newMessage = await storage.createMessage({
+              conversationId: conv.id,
+              content: messageBody,
+              isFromContact: true,
+              whatsappMessageId: msg.id,
+            });
+
+            if (conv.assignedTo) {
+              broadcastToUser(conv.assignedTo, {
+                type: "new_message",
+                message: newMessage,
+                conversationId: conv.id,
+              });
+            }
+
+            const owner = container.ownerId;
+            broadcastToUser(owner, {
+              type: "new_message",
+              message: newMessage,
+              conversationId: conv.id,
+            });
+          }
+        }
+      }
+
+      res.status(200).json({ status: "ok" });
+    } catch (e: any) {
+      console.error("Webhook processing error:", e.message);
+      res.status(200).json({ status: "ok" });
+    }
+  });
+
+  // Test WhatsApp API connection
+  app.post("/api/containers/:id/test-connection", isAuthenticated, async (req: any, res) => {
+    try {
+      const container = await storage.getContainer(req.params.id);
+      if (!container) return res.status(404).json({ message: "Container not found" });
+      if (!container.phoneNumberId || !container.apiKey) {
+        return res.status(400).json({ message: "Phone Number ID and Access Token are required" });
+      }
+
+      const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
+      const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,code_verification_status`;
+      const waRes = await fetch(url, {
+        headers: { "Authorization": `Bearer ${container.apiKey}` },
+      });
+      const data = await waRes.json();
+
+      if (waRes.ok && !data.error) {
+        res.json({ success: true, phoneNumber: data.display_phone_number, qualityRating: data.quality_rating, verifiedName: data.verified_name });
+      } else {
+        res.json({ success: false, error: data.error?.message || "Connection failed. Check your Phone Number ID and Access Token." });
+      }
+    } catch (e: any) {
+      res.json({ success: false, error: e.message });
+    }
   });
 
   return httpServer;

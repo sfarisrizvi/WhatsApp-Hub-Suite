@@ -18,8 +18,12 @@ export const containers = pgTable("containers", {
   name: text("name").notNull(),
   phoneNumber: text("phone_number"),
   businessName: text("business_name"),
+  phoneNumberId: text("phone_number_id"),
+  wabaId: text("waba_id"),
   apiKey: text("api_key"),
   apiEndpoint: text("api_endpoint"),
+  appSecret: text("app_secret"),
+  webhookVerifyToken: text("webhook_verify_token"),
   isConfigured: boolean("is_configured").default(false),
   ownerId: varchar("owner_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -105,6 +109,7 @@ export const messages = pgTable("messages", {
   isFromContact: boolean("is_from_contact").default(false),
   isInternalNote: boolean("is_internal_note").default(false),
   mediaUrl: text("media_url"),
+  whatsappMessageId: text("whatsapp_message_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Settings as SettingsIcon, User, Box, Users, Plus, Trash2, Shield,
   Phone, Globe, Key, CheckCircle, AlertCircle, ArrowRight, HelpCircle,
+  Copy, ExternalLink, Loader2, Wifi, WifiOff,
 } from "lucide-react";
 import type { Container, ContainerMember } from "@shared/schema";
 
@@ -32,8 +33,12 @@ export default function Settings() {
   const { toast } = useToast();
   const [showCreateContainer, setShowCreateContainer] = useState(false);
   const [containerForm, setContainerForm] = useState({ name: "", phoneNumber: "", businessName: "" });
-  const [apiForm, setApiForm] = useState({ apiKey: "", apiEndpoint: "" });
+  const [apiForm, setApiForm] = useState({
+    apiKey: "", apiEndpoint: "", phoneNumberId: "", wabaId: "", appSecret: "", webhookVerifyToken: "",
+  });
   const [setupStep, setSetupStep] = useState(0);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; verifiedName?: string; phoneNumber?: string } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const defaultTab = urlParams.get("tab") || "profile";
@@ -87,19 +92,64 @@ export default function Settings() {
     if (activeContainer) {
       setApiForm({
         apiKey: activeContainer.apiKey || "",
-        apiEndpoint: activeContainer.apiEndpoint || "",
+        apiEndpoint: activeContainer.apiEndpoint || "https://graph.facebook.com/v18.0/",
+        phoneNumberId: activeContainer.phoneNumberId || "",
+        wabaId: activeContainer.wabaId || "",
+        appSecret: activeContainer.appSecret || "",
+        webhookVerifyToken: activeContainer.webhookVerifyToken || crypto.randomUUID().replace(/-/g, "").slice(0, 24),
       });
+      setTestResult(null);
     }
   }, [activeContainer]);
 
   const initials = user ? `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U" : "U";
 
+  const webhookUrl = `${window.location.origin}/api/webhook`;
+
+  const testConnection = async () => {
+    if (!activeContainer) return;
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const res = await apiRequest("POST", `/api/containers/${activeContainer.id}/test-connection`);
+      const data = await res.json();
+      setTestResult(data);
+    } catch (e: any) {
+      setTestResult({ success: false, error: e.message });
+    }
+    setIsTesting(false);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard" });
+  };
+
   const setupSteps = [
-    { title: "Create WhatsApp Business Account", desc: "Go to Meta Business Suite and create a Business Account if you don't have one." },
-    { title: "Set Up WhatsApp Business API", desc: "Navigate to Meta for Developers and create a WhatsApp Business app." },
-    { title: "Generate API Token", desc: "In your app dashboard, generate a permanent access token for the WhatsApp Business API." },
-    { title: "Configure Webhook", desc: "Set up a webhook URL to receive incoming messages. Use your server's webhook endpoint." },
-    { title: "Connect to WA CRM", desc: "Enter your API key and endpoint below to connect your WhatsApp Business account." },
+    {
+      title: "Create Meta Business Account",
+      desc: "Go to business.facebook.com and create a Business Account. This is required to access the WhatsApp Business Platform.",
+      link: "https://business.facebook.com/",
+    },
+    {
+      title: "Create WhatsApp Business App",
+      desc: "In Meta for Developers, create a new app and select 'Business' type. Then add the 'WhatsApp' product to your app.",
+      link: "https://developers.facebook.com/apps/",
+    },
+    {
+      title: "Get API Credentials",
+      desc: "In your app dashboard under WhatsApp > API Setup, find your Phone Number ID and generate a permanent System User Access Token. Under Settings > Basic, copy your App Secret.",
+      link: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started",
+    },
+    {
+      title: "Configure Webhook in Meta",
+      desc: `In your app's WhatsApp > Configuration, set the Callback URL and Verify Token. Subscribe to 'messages' and 'message_status' webhook fields.`,
+      webhookUrl,
+    },
+    {
+      title: "Enter Credentials Below",
+      desc: "Fill in all the fields in the API Configuration form below and save. Then use 'Test Connection' to verify everything works.",
+    },
   ];
 
   return (
@@ -283,7 +333,7 @@ export default function Settings() {
               <HelpCircle className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="space-y-4">
-              {setupSteps.map((step, i) => (
+              {setupSteps.map((step: any, i: number) => (
                 <div key={i} className="flex gap-3" data-testid={`setup-step-${i}`}>
                   <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
                     i <= setupStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
@@ -293,6 +343,31 @@ export default function Settings() {
                   <div className="flex-1">
                     <p className={`text-sm font-medium ${i <= setupStep ? "" : "text-muted-foreground"}`}>{step.title}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
+                    {step.link && (
+                      <a href={step.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1" data-testid={`link-step-${i}`}>
+                        <ExternalLink className="h-3 w-3" /> Open Documentation
+                      </a>
+                    )}
+                    {step.webhookUrl && (
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono flex-1 truncate" data-testid="text-webhook-url">{step.webhookUrl}</code>
+                          <Button size="sm" variant="outline" onClick={() => copyToClipboard(step.webhookUrl)} data-testid="button-copy-webhook">
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Verify Token:</span>
+                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono" data-testid="text-verify-token">{apiForm.webhookVerifyToken || "Save config first"}</code>
+                          {apiForm.webhookVerifyToken && (
+                            <Button size="sm" variant="outline" onClick={() => copyToClipboard(apiForm.webhookVerifyToken)} data-testid="button-copy-verify-token">
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Subscribe to: <strong>messages</strong>, <strong>message_status</strong></p>
+                      </div>
+                    )}
                     {i === setupStep && i < setupSteps.length - 1 && (
                       <Button size="sm" variant="outline" className="mt-2" onClick={() => setSetupStep(i + 1)} data-testid={`button-next-step-${i}`}>
                         Next <ArrowRight className="h-3 w-3 ml-1" />
@@ -308,34 +383,113 @@ export default function Settings() {
             <Card className="p-6">
               <h3 className="font-semibold mb-4">API Configuration - {activeContainer.name}</h3>
               <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label>Phone Number ID</Label>
+                    <Input
+                      value={apiForm.phoneNumberId}
+                      onChange={(e) => setApiForm(f => ({ ...f, phoneNumberId: e.target.value }))}
+                      data-testid="input-phone-number-id"
+                      placeholder="e.g. 110123456789012345"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">Found in WhatsApp &gt; API Setup in your Meta app dashboard</p>
+                  </div>
+                  <div>
+                    <Label>WhatsApp Business Account ID (WABA ID)</Label>
+                    <Input
+                      value={apiForm.wabaId}
+                      onChange={(e) => setApiForm(f => ({ ...f, wabaId: e.target.value }))}
+                      data-testid="input-waba-id"
+                      placeholder="e.g. 123456789012345"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">Found in Business Manager &gt; WhatsApp Accounts</p>
+                  </div>
+                </div>
                 <div>
-                  <Label>API Key / Access Token</Label>
+                  <Label>Permanent Access Token</Label>
                   <Input
                     type="password"
                     value={apiForm.apiKey}
                     onChange={(e) => setApiForm(f => ({ ...f, apiKey: e.target.value }))}
                     data-testid="input-api-key"
-                    placeholder="Enter your WhatsApp Business API token"
+                    placeholder="System User Access Token from Meta Business Settings"
                   />
+                  <p className="text-[10px] text-muted-foreground mt-1">Generate a System User token with whatsapp_business_messaging permission</p>
                 </div>
                 <div>
-                  <Label>API Endpoint</Label>
+                  <Label>App Secret</Label>
                   <Input
-                    value={apiForm.apiEndpoint}
-                    onChange={(e) => setApiForm(f => ({ ...f, apiEndpoint: e.target.value }))}
-                    data-testid="input-api-endpoint"
-                    placeholder="https://graph.facebook.com/v18.0/"
+                    type="password"
+                    value={apiForm.appSecret}
+                    onChange={(e) => setApiForm(f => ({ ...f, appSecret: e.target.value }))}
+                    data-testid="input-app-secret"
+                    placeholder="Found in App Settings > Basic"
                   />
+                  <p className="text-[10px] text-muted-foreground mt-1">Used to verify incoming webhook payloads for security</p>
                 </div>
-                <Button onClick={() => {
-                  updateContainerMutation.mutate({
-                    id: activeContainer.id,
-                    data: { ...apiForm, isConfigured: !!(apiForm.apiKey && apiForm.apiEndpoint) },
-                  });
-                  setSetupStep(5);
-                }} disabled={updateContainerMutation.isPending} data-testid="button-save-api">
-                  <Key className="h-3.5 w-3.5 mr-1" /> Save Configuration
-                </Button>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label>API Endpoint</Label>
+                    <Input
+                      value={apiForm.apiEndpoint}
+                      onChange={(e) => setApiForm(f => ({ ...f, apiEndpoint: e.target.value }))}
+                      data-testid="input-api-endpoint"
+                      placeholder="https://graph.facebook.com/v18.0/"
+                    />
+                  </div>
+                  <div>
+                    <Label>Webhook Verify Token</Label>
+                    <Input
+                      value={apiForm.webhookVerifyToken}
+                      onChange={(e) => setApiForm(f => ({ ...f, webhookVerifyToken: e.target.value }))}
+                      data-testid="input-webhook-verify-token"
+                      placeholder="Auto-generated token"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">Use this value in Meta's webhook configuration</p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Button onClick={() => {
+                    const isConfigured = !!(apiForm.apiKey && apiForm.phoneNumberId && apiForm.wabaId);
+                    updateContainerMutation.mutate({
+                      id: activeContainer.id,
+                      data: { ...apiForm, isConfigured },
+                    });
+                    if (isConfigured) setSetupStep(5);
+                  }} disabled={updateContainerMutation.isPending} data-testid="button-save-api">
+                    <Key className="h-3.5 w-3.5 mr-1" /> Save Configuration
+                  </Button>
+                  <Button variant="outline" onClick={testConnection} disabled={isTesting || !apiForm.phoneNumberId || !apiForm.apiKey} data-testid="button-test-connection">
+                    {isTesting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Wifi className="h-3.5 w-3.5 mr-1" />}
+                    Test Connection
+                  </Button>
+                </div>
+
+                {testResult && (
+                  <div className={`p-3 rounded-lg border text-sm ${testResult.success ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`} data-testid="text-test-result">
+                    {testResult.success ? (
+                      <div className="flex items-start gap-2">
+                        <Wifi className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-green-800 dark:text-green-200">Connection Successful</p>
+                          {testResult.verifiedName && <p className="text-xs text-green-700 dark:text-green-300">Business: {testResult.verifiedName}</p>}
+                          {testResult.phoneNumber && <p className="text-xs text-green-700 dark:text-green-300">Phone: {testResult.phoneNumber}</p>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-2">
+                        <WifiOff className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-red-800 dark:text-red-200">Connection Failed</p>
+                          <p className="text-xs text-red-700 dark:text-red-300">{testResult.error}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           )}

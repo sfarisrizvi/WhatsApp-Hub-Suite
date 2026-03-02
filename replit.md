@@ -30,10 +30,18 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 ## WhatsApp Business API Integration
 - **Outbound**: Messages sent from inbox are forwarded to WhatsApp Cloud API when workspace is configured (phoneNumberId + apiKey)
 - **Inbound**: Webhook endpoints at GET/POST `/api/webhook` receive incoming messages from Meta
-- **Security**: Webhook payloads verified using App Secret (HMAC-SHA256)
+- **Security**: Webhook payloads verified using App Secret (HMAC-SHA256, constant-time comparison); falls back to server-level META_APP_SECRET
 - **Container fields**: phoneNumberId, wabaId, apiKey, apiEndpoint, appSecret, webhookVerifyToken
 - **Messages table**: whatsappMessageId tracks Meta's message IDs
 - **Graceful fallback**: Unconfigured workspaces work in local/demo mode
+
+## Meta Embedded Signup (WhatsApp)
+- **Flow**: User clicks "Connect with Facebook" → FB.login popup → captures code + WABA/phone IDs → backend exchanges code for access token → auto-registers phone → subscribes webhook → creates/updates container
+- **Frontend**: `client/src/lib/facebook-sdk.ts` loads FB SDK dynamically, `launchWhatsAppSignup(configId)` triggers the signup popup and captures WA_EMBEDDED_SIGNUP session data
+- **Backend**: `POST /api/whatsapp/embedded-signup` handles OAuth token exchange with ownership verification; `GET /api/whatsapp/app-config` returns public app ID + config ID
+- **Settings UI**: Dual-mode — primary "Connect with Facebook" button (Embedded Signup), collapsible "Manual Setup (Advanced)" fallback with step-by-step guide
+- **Security**: Container ownership verified before updates; META_APP_SECRET kept server-side only (not stored in containers); webhook URL derived from REPLIT_DEV_DOMAIN env var
+- **Environment secrets**: META_APP_ID, META_APP_SECRET, META_CONFIG_ID
 
 ## Project Structure
 ```
@@ -59,6 +67,7 @@ client/src/
     ws-context.tsx        - WebSocket context
     queryClient.ts        - TanStack Query setup
     auth-utils.ts         - Auth utilities
+    facebook-sdk.ts       - FB SDK loader + WhatsApp Embedded Signup launcher
   hooks/
     use-auth.ts          - Auth hook
 
@@ -82,8 +91,11 @@ users, sessions, containers (with phoneNumberId, wabaId, appSecret, webhookVerif
 - GET /api/webhook - Meta webhook verification handshake
 - POST /api/webhook - Receive incoming WhatsApp messages
 - POST /api/containers/:id/test-connection - Test WhatsApp API credentials
+- GET /api/whatsapp/app-config - Public Meta App ID + Config ID for FB SDK
+- POST /api/whatsapp/embedded-signup - OAuth token exchange + auto-configure container
 
 ## Environment Variables
 - DATABASE_URL (auto-provisioned)
 - SESSION_SECRET
+- META_APP_ID, META_APP_SECRET, META_CONFIG_ID (Meta Embedded Signup)
 - REPL_ID, ISSUER_URL (Replit Auth)

@@ -440,7 +440,8 @@ export async function registerRoutes(
           .where(eq(containers.wabaId, wabaId));
         if (!container) continue;
 
-        if (container.appSecret) {
+        const signingSecret = container.appSecret || process.env.META_APP_SECRET;
+        if (signingSecret) {
           if (!signature) {
             console.warn("Webhook missing signature for container:", container.id);
             continue;
@@ -449,7 +450,7 @@ export async function registerRoutes(
             ? Buffer.from((req as any).rawBody)
             : Buffer.from(JSON.stringify(body));
           const expected = "sha256=" + crypto
-            .createHmac("sha256", container.appSecret)
+            .createHmac("sha256", signingSecret)
             .update(rawBody)
             .digest("hex");
           try {
@@ -558,6 +559,160 @@ export async function registerRoutes(
       }
     } catch (e: any) {
       res.json({ success: false, error: e.message });
+    }
+  });
+
+  // WhatsApp Embedded Signup - public config endpoint
+  app.get("/api/whatsapp/app-config", (_req, res) => {
+    const appId = process.env.META_APP_ID;
+    const configId = process.env.META_CONFIG_ID;
+    if (!appId || !configId) {
+      return res.status(503).json({ message: "Meta App not configured" });
+    }
+    res.json({ appId, configId });
+  });
+
+  // WhatsApp Embedded Signup - OAuth token exchange and auto-configuration
+  app.post("/api/whatsapp/embedded-signup", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { code, phoneNumberId, wabaId, containerId } = req.body;
+
+      if (!code) {
+        return res.status(400).json({ message: "Authorization code is required" });
+      }
+
+      const appId = process.env.META_APP_ID;
+      const appSecret = process.env.META_APP_SECRET;
+      if (!appId || !appSecret) {
+        return res.status(503).json({ message: "Meta App credentials not configured on server" });
+      }
+
+      const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}`;
+      const tokenRes = await fetch(tokenUrl);
+      const tokenData = await tokenRes.json();
+
+      if (!tokenRes.ok || tokenData.error) {
+        return res.status(400).json({
+          message: tokenData.error?.message || "Failed to exchange authorization code for access token",
+        });
+      }
+
+      const accessToken = tokenData.access_token;
+
+      let resolvedPhoneNumberId = phoneNumberId;
+      let resolvedWabaId = wabaId;
+      let phoneDisplay = "";
+      let verifiedName = "";
+
+      if (resolvedWabaId && !resolvedPhoneNumberId) {
+        try {
+          const phonesRes = await fetch(
+            `https://graph.facebook.com/v21.0/${resolvedWabaId}/phone_numbers`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          const phonesData = await phonesRes.json();
+          if (phonesData.data?.[0]) {
+            resolvedPhoneNumberId = phonesData.data[0].id;
+            phoneDisplay = phonesData.data[0].display_phone_number || "";
+            verifiedName = phonesData.data[0].verified_name || "";
+          }
+        } catch (e: any) {
+          console.error("Failed to fetch phone numbers:", e.message);
+        }
+      }
+
+      if (resolvedPhoneNumberId) {
+        try {
+          const phoneInfoRes = await fetch(
+            `https://graph.facebook.com/v21.0/${resolvedPhoneNumberId}?fields=verified_name,display_phone_number`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          const phoneInfo = await phoneInfoRes.json();
+          if (phoneInfo.display_phone_number) phoneDisplay = phoneInfo.display_phone_number;
+          if (phoneInfo.verified_name) verifiedName = phoneInfo.verified_name;
+        } catch {}
+      }
+
+      if (resolvedPhoneNumberId) {
+        try {
+          await fetch(`https://graph.facebook.com/v21.0/${resolvedPhoneNumberId}/register`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              pin: String(Math.floor(100000 + Math.random() * 900000)),
+            }),
+          });
+        } catch (e: any) {
+          console.error("Phone registration (may already be registered):", e.message);
+        }
+      }
+
+      const webhookVerifyToken = crypto.randomBytes(16).toString("hex");
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.REPL_SLUG
+          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+          : `https://${req.headers.host}`;
+      const webhookUrl = `${baseUrl}/api/webhook`;
+
+      if (resolvedWabaId) {
+        try {
+          await fetch(`https://graph.facebook.com/v21.0/${resolvedWabaId}/subscribed_apps`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              override_callback_uri: webhookUrl,
+              verify_token: webhookVerifyToken,
+            }),
+          });
+        } catch (e: any) {
+          console.error("Webhook subscription error:", e.message);
+        }
+      }
+
+      const containerData: any = {
+        apiKey: accessToken,
+        apiEndpoint: "https://graph.facebook.com/v21.0/",
+        webhookVerifyToken,
+        isConfigured: true,
+      };
+      if (resolvedPhoneNumberId) containerData.phoneNumberId = resolvedPhoneNumberId;
+      if (resolvedWabaId) containerData.wabaId = resolvedWabaId;
+      if (phoneDisplay) containerData.phoneNumber = phoneDisplay;
+      if (verifiedName) containerData.businessName = verifiedName;
+
+      let container;
+      if (containerId) {
+        const existing = await storage.getContainer(containerId);
+        if (!existing || existing.ownerId !== userId) {
+          return res.status(403).json({ message: "Not authorized to update this container" });
+        }
+        container = await storage.updateContainer(containerId, containerData);
+      } else {
+        container = await storage.createContainer({
+          ...containerData,
+          name: verifiedName || "WhatsApp Business",
+          ownerId: userId,
+        });
+      }
+
+      res.json({
+        success: true,
+        container,
+        phoneNumber: phoneDisplay,
+        verifiedName,
+      });
+    } catch (e: any) {
+      console.error("Embedded signup error:", e.message);
+      res.status(500).json({ message: e.message });
     }
   });
 

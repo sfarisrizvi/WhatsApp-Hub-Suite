@@ -21,11 +21,16 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Settings as SettingsIcon, User, Box, Users, Plus, Trash2, Shield,
   Phone, Globe, Key, CheckCircle, AlertCircle, ArrowRight, HelpCircle,
-  Copy, ExternalLink, Loader2, Wifi, WifiOff,
+  Copy, ExternalLink, Loader2, Wifi, WifiOff, MessageSquare, ChevronDown, Unplug,
 } from "lucide-react";
+import { SiFacebook } from "react-icons/si";
 import type { Container, ContainerMember } from "@shared/schema";
+import { loadFacebookSDK, launchWhatsAppSignup } from "@/lib/facebook-sdk";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -39,6 +44,9 @@ export default function Settings() {
   const [setupStep, setSetupStep] = useState(0);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string; verifiedName?: string; phoneNumber?: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [showManualSetup, setShowManualSetup] = useState(false);
+  const [embeddedSignupResult, setEmbeddedSignupResult] = useState<{ success: boolean; phoneNumber?: string; verifiedName?: string; error?: string } | null>(null);
 
   const urlParams = new URLSearchParams(window.location.search);
   const defaultTab = urlParams.get("tab") || "profile";
@@ -123,6 +131,62 @@ export default function Settings() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard" });
+  };
+
+  const handleEmbeddedSignup = async () => {
+    setIsConnecting(true);
+    setEmbeddedSignupResult(null);
+    try {
+      const configRes = await fetch("/api/whatsapp/app-config");
+      if (!configRes.ok) {
+        throw new Error("WhatsApp Embedded Signup is not configured on this server");
+      }
+      const { appId, configId } = await configRes.json();
+
+      await loadFacebookSDK(appId);
+      const result = await launchWhatsAppSignup(configId);
+
+      const res = await apiRequest("POST", "/api/whatsapp/embedded-signup", {
+        code: result.code,
+        phoneNumberId: result.phoneNumberId,
+        wabaId: result.wabaId,
+        containerId: activeContainer?.id,
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/containers"] });
+        setActiveContainer(data.container);
+        setEmbeddedSignupResult({
+          success: true,
+          phoneNumber: data.phoneNumber,
+          verifiedName: data.verifiedName,
+        });
+        toast({ title: "WhatsApp Business connected successfully!" });
+      } else {
+        setEmbeddedSignupResult({ success: false, error: data.message || "Setup failed" });
+      }
+    } catch (e: any) {
+      if (e.message !== "Login cancelled or not fully authorized") {
+        setEmbeddedSignupResult({ success: false, error: e.message });
+      }
+    }
+    setIsConnecting(false);
+  };
+
+  const handleDisconnect = () => {
+    if (!activeContainer) return;
+    updateContainerMutation.mutate({
+      id: activeContainer.id,
+      data: {
+        apiKey: null, apiEndpoint: null, phoneNumberId: null, wabaId: null,
+        appSecret: null, webhookVerifyToken: null, isConfigured: false,
+        phoneNumber: null, businessName: null,
+      },
+    });
+    setEmbeddedSignupResult(null);
+    setTestResult(null);
+    toast({ title: "WhatsApp Business disconnected" });
   };
 
   const setupSteps = [
@@ -328,171 +392,271 @@ export default function Settings() {
 
         <TabsContent value="api" className="mt-6 space-y-6">
           <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="font-semibold">WhatsApp Business API Setup Guide</h3>
-              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 rounded-lg bg-[#25D366]/10 flex items-center justify-center">
+                <MessageSquare className="h-5 w-5 text-[#25D366]" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Connect WhatsApp Business</h3>
+                <p className="text-xs text-muted-foreground">Connect your WhatsApp Business account in just a few clicks</p>
+              </div>
             </div>
-            <div className="space-y-4">
-              {setupSteps.map((step: any, i: number) => (
-                <div key={i} className="flex gap-3" data-testid={`setup-step-${i}`}>
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
-                    i <= setupStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                  }`}>
-                    {i < setupStep ? <CheckCircle className="h-4 w-4" /> : i + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${i <= setupStep ? "" : "text-muted-foreground"}`}>{step.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
-                    {step.link && (
-                      <a href={step.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1" data-testid={`link-step-${i}`}>
-                        <ExternalLink className="h-3 w-3" /> Open Documentation
-                      </a>
-                    )}
-                    {step.webhookUrl && (
-                      <div className="mt-2 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono flex-1 truncate" data-testid="text-webhook-url">{step.webhookUrl}</code>
-                          <Button size="sm" variant="outline" onClick={() => copyToClipboard(step.webhookUrl)} data-testid="button-copy-webhook">
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">Verify Token:</span>
-                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono" data-testid="text-verify-token">{apiForm.webhookVerifyToken || "Save config first"}</code>
-                          {apiForm.webhookVerifyToken && (
-                            <Button size="sm" variant="outline" onClick={() => copyToClipboard(apiForm.webhookVerifyToken)} data-testid="button-copy-verify-token">
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">Subscribe to: <strong>messages</strong>, <strong>message_status</strong></p>
+
+            {activeContainer?.isConfigured ? (
+              <div className="mt-4">
+                <div className="p-4 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" data-testid="text-connected-status">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-green-800 dark:text-green-200">WhatsApp Business Connected</p>
+                        {activeContainer.businessName && (
+                          <p className="text-sm text-green-700 dark:text-green-300">{activeContainer.businessName}</p>
+                        )}
+                        {activeContainer.phoneNumber && (
+                          <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-1">
+                            <Phone className="h-3 w-3" /> {activeContainer.phoneNumber}
+                          </p>
+                        )}
+                        {activeContainer.phoneNumberId && (
+                          <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 font-mono">
+                            Phone ID: {activeContainer.phoneNumberId}
+                          </p>
+                        )}
                       </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={handleDisconnect} className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10" data-testid="button-disconnect">
+                      <Unplug className="h-3.5 w-3.5 mr-1" /> Disconnect
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm mb-3">The fastest way to get started. Click below to sign in with Facebook, choose your Business Manager, and connect your WhatsApp number — all in one step.</p>
+                  <Button
+                    onClick={handleEmbeddedSignup}
+                    disabled={isConnecting}
+                    className="bg-[#1877F2] hover:bg-[#166FE5] text-white"
+                    size="lg"
+                    data-testid="button-connect-whatsapp"
+                  >
+                    {isConnecting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <SiFacebook className="h-4 w-4 mr-2" />
                     )}
-                    {i === setupStep && i < setupSteps.length - 1 && (
-                      <Button size="sm" variant="outline" className="mt-2" onClick={() => setSetupStep(i + 1)} data-testid={`button-next-step-${i}`}>
-                        Next <ArrowRight className="h-3 w-3 ml-1" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {activeContainer && (
-            <Card className="p-6">
-              <h3 className="font-semibold mb-4">API Configuration - {activeContainer.name}</h3>
-              <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label>Phone Number ID</Label>
-                    <Input
-                      value={apiForm.phoneNumberId}
-                      onChange={(e) => setApiForm(f => ({ ...f, phoneNumberId: e.target.value }))}
-                      data-testid="input-phone-number-id"
-                      placeholder="e.g. 110123456789012345"
-                    />
-                    <p className="text-[10px] text-muted-foreground mt-1">Found in WhatsApp &gt; API Setup in your Meta app dashboard</p>
-                  </div>
-                  <div>
-                    <Label>WhatsApp Business Account ID (WABA ID)</Label>
-                    <Input
-                      value={apiForm.wabaId}
-                      onChange={(e) => setApiForm(f => ({ ...f, wabaId: e.target.value }))}
-                      data-testid="input-waba-id"
-                      placeholder="e.g. 123456789012345"
-                    />
-                    <p className="text-[10px] text-muted-foreground mt-1">Found in Business Manager &gt; WhatsApp Accounts</p>
-                  </div>
-                </div>
-                <div>
-                  <Label>Permanent Access Token</Label>
-                  <Input
-                    type="password"
-                    value={apiForm.apiKey}
-                    onChange={(e) => setApiForm(f => ({ ...f, apiKey: e.target.value }))}
-                    data-testid="input-api-key"
-                    placeholder="System User Access Token from Meta Business Settings"
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-1">Generate a System User token with whatsapp_business_messaging permission</p>
-                </div>
-                <div>
-                  <Label>App Secret</Label>
-                  <Input
-                    type="password"
-                    value={apiForm.appSecret}
-                    onChange={(e) => setApiForm(f => ({ ...f, appSecret: e.target.value }))}
-                    data-testid="input-app-secret"
-                    placeholder="Found in App Settings > Basic"
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-1">Used to verify incoming webhook payloads for security</p>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label>API Endpoint</Label>
-                    <Input
-                      value={apiForm.apiEndpoint}
-                      onChange={(e) => setApiForm(f => ({ ...f, apiEndpoint: e.target.value }))}
-                      data-testid="input-api-endpoint"
-                      placeholder="https://graph.facebook.com/v18.0/"
-                    />
-                  </div>
-                  <div>
-                    <Label>Webhook Verify Token</Label>
-                    <Input
-                      value={apiForm.webhookVerifyToken}
-                      onChange={(e) => setApiForm(f => ({ ...f, webhookVerifyToken: e.target.value }))}
-                      data-testid="input-webhook-verify-token"
-                      placeholder="Auto-generated token"
-                    />
-                    <p className="text-[10px] text-muted-foreground mt-1">Use this value in Meta's webhook configuration</p>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Button onClick={() => {
-                    const isConfigured = !!(apiForm.apiKey && apiForm.phoneNumberId && apiForm.wabaId);
-                    updateContainerMutation.mutate({
-                      id: activeContainer.id,
-                      data: { ...apiForm, isConfigured },
-                    });
-                    if (isConfigured) setSetupStep(5);
-                  }} disabled={updateContainerMutation.isPending} data-testid="button-save-api">
-                    <Key className="h-3.5 w-3.5 mr-1" /> Save Configuration
+                    Connect with Facebook
                   </Button>
-                  <Button variant="outline" onClick={testConnection} disabled={isTesting || !apiForm.phoneNumberId || !apiForm.apiKey} data-testid="button-test-connection">
-                    {isTesting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Wifi className="h-3.5 w-3.5 mr-1" />}
-                    Test Connection
-                  </Button>
+                  <p className="text-[10px] text-muted-foreground mt-2">You'll be asked to select a Business Portfolio, WhatsApp Business Account, and phone number.</p>
                 </div>
 
-                {testResult && (
-                  <div className={`p-3 rounded-lg border text-sm ${testResult.success ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`} data-testid="text-test-result">
-                    {testResult.success ? (
+                {embeddedSignupResult && (
+                  <div className={`p-3 rounded-lg border text-sm ${embeddedSignupResult.success ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`} data-testid="text-signup-result">
+                    {embeddedSignupResult.success ? (
                       <div className="flex items-start gap-2">
-                        <Wifi className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                        <CheckCircle className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-medium text-green-800 dark:text-green-200">Connection Successful</p>
-                          {testResult.verifiedName && <p className="text-xs text-green-700 dark:text-green-300">Business: {testResult.verifiedName}</p>}
-                          {testResult.phoneNumber && <p className="text-xs text-green-700 dark:text-green-300">Phone: {testResult.phoneNumber}</p>}
+                          <p className="font-medium text-green-800 dark:text-green-200">Connected Successfully!</p>
+                          {embeddedSignupResult.verifiedName && <p className="text-xs text-green-700 dark:text-green-300">Business: {embeddedSignupResult.verifiedName}</p>}
+                          {embeddedSignupResult.phoneNumber && <p className="text-xs text-green-700 dark:text-green-300">Phone: {embeddedSignupResult.phoneNumber}</p>}
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-start gap-2">
-                        <WifiOff className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                        <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-medium text-red-800 dark:text-red-200">Connection Failed</p>
-                          <p className="text-xs text-red-700 dark:text-red-300">{testResult.error}</p>
+                          <p className="font-medium text-red-800 dark:text-red-200">Setup Failed</p>
+                          <p className="text-xs text-red-700 dark:text-red-300">{embeddedSignupResult.error}</p>
                         </div>
                       </div>
                     )}
                   </div>
                 )}
               </div>
-            </Card>
-          )}
+            )}
+          </Card>
+
+          <Collapsible open={showManualSetup} onOpenChange={setShowManualSetup}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between text-muted-foreground" data-testid="button-toggle-manual-setup">
+                <span className="flex items-center gap-2 text-sm">
+                  <Key className="h-3.5 w-3.5" />
+                  Manual Setup (Advanced)
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${showManualSetup ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-6 mt-4">
+              <Card className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="font-semibold">Step-by-Step Setup Guide</h3>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="space-y-4">
+                  {setupSteps.map((step: any, i: number) => (
+                    <div key={i} className="flex gap-3" data-testid={`setup-step-${i}`}>
+                      <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
+                        i <= setupStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {i < setupStep ? <CheckCircle className="h-4 w-4" /> : i + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className={`text-sm font-medium ${i <= setupStep ? "" : "text-muted-foreground"}`}>{step.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
+                        {step.link && (
+                          <a href={step.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1" data-testid={`link-step-${i}`}>
+                            <ExternalLink className="h-3 w-3" /> Open Documentation
+                          </a>
+                        )}
+                        {step.webhookUrl && (
+                          <div className="mt-2 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono flex-1 truncate" data-testid="text-webhook-url">{step.webhookUrl}</code>
+                              <Button size="sm" variant="outline" onClick={() => copyToClipboard(step.webhookUrl)} data-testid="button-copy-webhook">
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">Verify Token:</span>
+                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono" data-testid="text-verify-token">{apiForm.webhookVerifyToken || "Save config first"}</code>
+                              {apiForm.webhookVerifyToken && (
+                                <Button size="sm" variant="outline" onClick={() => copyToClipboard(apiForm.webhookVerifyToken)} data-testid="button-copy-verify-token">
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">Subscribe to: <strong>messages</strong>, <strong>message_status</strong></p>
+                          </div>
+                        )}
+                        {i === setupStep && i < setupSteps.length - 1 && (
+                          <Button size="sm" variant="outline" className="mt-2" onClick={() => setSetupStep(i + 1)} data-testid={`button-next-step-${i}`}>
+                            Next <ArrowRight className="h-3 w-3 ml-1" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {activeContainer && (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-4">API Configuration - {activeContainer.name}</h3>
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Phone Number ID</Label>
+                        <Input
+                          value={apiForm.phoneNumberId}
+                          onChange={(e) => setApiForm(f => ({ ...f, phoneNumberId: e.target.value }))}
+                          data-testid="input-phone-number-id"
+                          placeholder="e.g. 110123456789012345"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">Found in WhatsApp &gt; API Setup in your Meta app dashboard</p>
+                      </div>
+                      <div>
+                        <Label>WhatsApp Business Account ID (WABA ID)</Label>
+                        <Input
+                          value={apiForm.wabaId}
+                          onChange={(e) => setApiForm(f => ({ ...f, wabaId: e.target.value }))}
+                          data-testid="input-waba-id"
+                          placeholder="e.g. 123456789012345"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">Found in Business Manager &gt; WhatsApp Accounts</p>
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Permanent Access Token</Label>
+                      <Input
+                        type="password"
+                        value={apiForm.apiKey}
+                        onChange={(e) => setApiForm(f => ({ ...f, apiKey: e.target.value }))}
+                        data-testid="input-api-key"
+                        placeholder="System User Access Token from Meta Business Settings"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">Generate a System User token with whatsapp_business_messaging permission</p>
+                    </div>
+                    <div>
+                      <Label>App Secret</Label>
+                      <Input
+                        type="password"
+                        value={apiForm.appSecret}
+                        onChange={(e) => setApiForm(f => ({ ...f, appSecret: e.target.value }))}
+                        data-testid="input-app-secret"
+                        placeholder="Found in App Settings > Basic"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">Used to verify incoming webhook payloads for security</p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>API Endpoint</Label>
+                        <Input
+                          value={apiForm.apiEndpoint}
+                          onChange={(e) => setApiForm(f => ({ ...f, apiEndpoint: e.target.value }))}
+                          data-testid="input-api-endpoint"
+                          placeholder="https://graph.facebook.com/v18.0/"
+                        />
+                      </div>
+                      <div>
+                        <Label>Webhook Verify Token</Label>
+                        <Input
+                          value={apiForm.webhookVerifyToken}
+                          onChange={(e) => setApiForm(f => ({ ...f, webhookVerifyToken: e.target.value }))}
+                          data-testid="input-webhook-verify-token"
+                          placeholder="Auto-generated token"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">Use this value in Meta's webhook configuration</p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <Button onClick={() => {
+                        const isConfigured = !!(apiForm.apiKey && apiForm.phoneNumberId && apiForm.wabaId);
+                        updateContainerMutation.mutate({
+                          id: activeContainer.id,
+                          data: { ...apiForm, isConfigured },
+                        });
+                        if (isConfigured) setSetupStep(5);
+                      }} disabled={updateContainerMutation.isPending} data-testid="button-save-api">
+                        <Key className="h-3.5 w-3.5 mr-1" /> Save Configuration
+                      </Button>
+                      <Button variant="outline" onClick={testConnection} disabled={isTesting || !apiForm.phoneNumberId || !apiForm.apiKey} data-testid="button-test-connection">
+                        {isTesting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Wifi className="h-3.5 w-3.5 mr-1" />}
+                        Test Connection
+                      </Button>
+                    </div>
+
+                    {testResult && (
+                      <div className={`p-3 rounded-lg border text-sm ${testResult.success ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`} data-testid="text-test-result">
+                        {testResult.success ? (
+                          <div className="flex items-start gap-2">
+                            <Wifi className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-green-800 dark:text-green-200">Connection Successful</p>
+                              {testResult.verifiedName && <p className="text-xs text-green-700 dark:text-green-300">Business: {testResult.verifiedName}</p>}
+                              {testResult.phoneNumber && <p className="text-xs text-green-700 dark:text-green-300">Phone: {testResult.phoneNumber}</p>}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-2">
+                            <WifiOff className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-red-800 dark:text-red-200">Connection Failed</p>
+                              <p className="text-xs text-red-700 dark:text-red-300">{testResult.error}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </TabsContent>
       </Tabs>
     </div>

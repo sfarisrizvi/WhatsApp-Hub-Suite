@@ -21,6 +21,7 @@ import {
   Plus, Check, CircleDot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import logoPath from "@assets/WA CRM favicon.webp";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -61,9 +62,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-            <MessageSquare className="h-4 w-4 text-primary-foreground" />
-          </div>
+          <img src={logoPath} alt="WA CRM" className="h-8 w-8 rounded-md" />
           <div className="flex flex-col">
             <span className="text-sm font-semibold" data-testid="text-app-name">WA CRM</span>
             <span className="text-xs text-muted-foreground">Automation Platform</span>

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
+import logoPath from "@assets/WA CRM favicon.webp";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -50,9 +51,7 @@ export default function AuthPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-center">
           <a href="/" className="flex items-center gap-2 group" data-testid="link-home">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#25D366] shadow-md">
-              <MessageSquare className="h-5 w-5 text-white" />
-            </div>
+            <img src={logoPath} alt="WA CRM" className="h-10 w-10 rounded-lg shadow-md" />
             <span className="text-xl font-bold">WA CRM</span>
           </a>
         </div>

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MessageSquare, Users, Zap, BarChart3, Send, ShoppingCart } from "lucide-react";
+import logoPath from "@assets/WA CRM favicon.webp";
 
 const features = [
   { icon: MessageSquare, title: "Team Inbox", desc: "Real-time shared inbox with assignments, statuses, and internal notes for seamless collaboration." },
@@ -17,9 +18,7 @@ export default function Landing() {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-1 px-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-              <MessageSquare className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src={logoPath} alt="WA CRM" className="h-9 w-9 rounded-md" />
             <span className="text-lg font-bold" data-testid="text-brand-name">WA CRM</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">

@@ -14,7 +14,7 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 ## Key Features
 - Multi-workspace (container) support with switcher
 - Contact management with tags, custom fields, CSV import/export
-- WhatsApp message templates with variable support + premade library
+- WhatsApp message templates (Standard, Limited Offer, Carousel) with phone mockup preview
 - Campaign broadcasting with audience targeting and scheduling
 - Automation rules (welcome, keyword, away messages)
 - Shared team inbox with real-time messaging and internal notes
@@ -26,14 +26,20 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - WhatsApp Cloud API integration (outbound messaging + inbound webhooks)
 - Webhook signature verification (x-hub-signature-256)
 - Test connection feature for API credentials
+- Clear Demo Data feature in Settings
 
 ## WhatsApp Business API Integration
 - **Outbound**: Messages sent from inbox are forwarded to WhatsApp Cloud API when workspace is configured (phoneNumberId + apiKey)
 - **Inbound**: Webhook endpoints at GET/POST `/api/webhook` receive incoming messages from Meta
+- **Message Types**: Text, image, video, audio, document, sticker, location, contacts (all logged and stored)
+- **Status Updates**: Delivered/read status updates logged from Meta
 - **Security**: Webhook payloads verified using App Secret (HMAC-SHA256, constant-time comparison); falls back to server-level META_APP_SECRET
 - **Container fields**: phoneNumberId, wabaId, apiKey, apiEndpoint, appSecret, webhookVerifyToken
 - **Messages table**: whatsappMessageId tracks Meta's message IDs
 - **Graceful fallback**: Unconfigured workspaces work in local/demo mode
+
+## Known Issues
+- **CRITICAL**: The `javascript_log_in_with_replit:2.0.0` integration in `.replit` causes Replit's replshield to 307-redirect ALL unauthenticated requests in deployment, blocking Meta webhook requests. This integration must be manually removed from the `.replit` file's `[agent] integrations` array. No tooling exists to remove it programmatically.
 
 ## Meta Embedded Signup (WhatsApp)
 - **Flow**: User clicks "Connect with Facebook" → FB.login popup → captures code + WABA/phone IDs → backend exchanges code for access token → auto-registers phone → subscribes webhook → creates/updates container
@@ -43,6 +49,11 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - **Security**: Container ownership verified before updates; META_APP_SECRET kept server-side only (not stored in containers); webhook URL derived from request host header (works correctly in both dev and production)
 - **Webhook**: Global WEBHOOK_VERIFY_TOKEN env var used as fallback for Meta App Dashboard manual setup; per-container tokens also supported; webhook info displayed in Settings page
 - **Environment secrets**: META_APP_ID, META_APP_SECRET, META_CONFIG_ID, WEBHOOK_VERIFY_TOKEN
+
+## Seed Data
+- New users get a blank workspace (no demo contacts/messages/etc.)
+- `DELETE /api/containers/:id/demo-data` endpoint clears demo data from existing workspaces
+- "Clear Demo Data" button in Settings > Workspaces tab
 
 ## Project Structure
 ```
@@ -78,7 +89,7 @@ server/
   routes.ts            - All API routes + WebSocket + WhatsApp webhook endpoints
   storage.ts           - DatabaseStorage with all CRUD operations
   db.ts                - Drizzle + pg pool
-  seed.ts              - Seed data for new users
+  seed.ts              - Minimal seed (blank workspace only)
   replit_integrations/auth/ - Email/password auth module (session, routes, storage)
 
 shared/
@@ -91,11 +102,12 @@ users (with email, username, password), sessions, containers (with phoneNumberId
 
 ## API Endpoints (WhatsApp-specific)
 - GET /api/webhook - Meta webhook verification handshake
-- POST /api/webhook - Receive incoming WhatsApp messages
+- POST /api/webhook - Receive incoming WhatsApp messages (with detailed logging)
 - POST /api/containers/:id/test-connection - Test WhatsApp API credentials
 - GET /api/whatsapp/app-config - Public Meta App ID + Config ID for FB SDK
 - GET /api/whatsapp/webhook-info - Returns webhook callback URL + verify token (authenticated)
 - POST /api/whatsapp/embedded-signup - OAuth token exchange + auto-configure container
+- DELETE /api/containers/:id/demo-data - Clear demo/sample data from workspace
 
 ## API Endpoints (Auth)
 - POST /api/auth/register - Create account (email, username, password)

@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
-import { containers, contacts, conversations } from "@shared/schema";
+import { containers, contacts, conversations, messages, deals, orders } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 
@@ -80,6 +80,48 @@ export async function registerRoutes(
       await storage.deleteContainer(req.params.id);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/containers/:id/demo-data", isAuthenticated, async (req: any, res) => {
+    try {
+      const containerId = req.params.id;
+      const container = await storage.getContainer(containerId);
+      if (!container || container.ownerId !== req.session.userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const demoPhones = ["+1 555-0201", "+1 555-0202", "+1 555-0203", "+1 555-0204", "+1 555-0205"];
+      const demoContacts = await db.select().from(contacts)
+        .where(and(eq(contacts.containerId, containerId)));
+      const demoContactIds = demoContacts
+        .filter(c => demoPhones.includes(c.phone) || c.email?.endsWith("@example.com"))
+        .map(c => c.id);
+
+      if (demoContactIds.length > 0) {
+        for (const contactId of demoContactIds) {
+          const convs = await db.select().from(conversations)
+            .where(and(eq(conversations.containerId, containerId), eq(conversations.contactId, contactId)));
+          for (const conv of convs) {
+            await db.delete(messages).where(eq(messages.conversationId, conv.id));
+          }
+          await db.delete(conversations)
+            .where(and(eq(conversations.containerId, containerId), eq(conversations.contactId, contactId)));
+          await db.delete(deals).where(eq(deals.contactId, contactId));
+          await db.delete(orders).where(eq(orders.contactId, contactId));
+          await db.delete(contacts).where(eq(contacts.id, contactId));
+        }
+      }
+
+      const { campaigns: campaignsTable, templates: templatesTable, automationRules: automationRulesTable } = await import("@shared/schema");
+      await db.delete(campaignsTable).where(eq(campaignsTable.containerId, containerId));
+      await db.delete(templatesTable).where(eq(templatesTable.containerId, containerId));
+      await db.delete(automationRulesTable).where(eq(automationRulesTable.containerId, containerId));
+
+      console.log("Demo data cleared for container:", containerId);
+      res.json({ success: true, cleared: demoContactIds.length });
+    } catch (e: any) {
+      console.error("Clear demo data error:", e.message);
+      res.status(500).json({ message: e.message });
+    }
   });
 
   // Container Members
@@ -540,7 +582,10 @@ export async function registerRoutes(
       const signature = req.headers["x-hub-signature-256"] as string | undefined;
       const body = req.body;
 
+      console.log("Webhook POST received:", { object: body.object, entries: body.entry?.length || 0 });
+
       if (body.object !== "whatsapp_business_account") {
+        console.log("Webhook rejected: invalid object type:", body.object);
         return res.status(400).json({ message: "Invalid object type" });
       }
 
@@ -548,12 +593,17 @@ export async function registerRoutes(
         const wabaId = entry.id;
         const [container] = await db.select().from(containers)
           .where(eq(containers.wabaId, wabaId));
-        if (!container) continue;
+
+        if (!container) {
+          console.warn("Webhook: no container found for wabaId:", wabaId);
+          continue;
+        }
+        console.log("Webhook: matched container", container.id, "for wabaId:", wabaId);
 
         const signingSecret = container.appSecret || process.env.META_APP_SECRET;
         if (signingSecret) {
           if (!signature) {
-            console.warn("Webhook missing signature for container:", container.id);
+            console.warn("Webhook: missing signature for container:", container.id);
             continue;
           }
           const rawBody = (req as any).rawBody
@@ -565,83 +615,125 @@ export async function registerRoutes(
             .digest("hex");
           try {
             if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-              console.warn("Webhook signature mismatch for container:", container.id);
+              console.warn("Webhook: signature mismatch for container:", container.id);
               continue;
             }
           } catch {
-            console.warn("Webhook signature validation error for container:", container.id);
+            console.warn("Webhook: signature validation error for container:", container.id);
             continue;
           }
+          console.log("Webhook: signature verified for container:", container.id);
         }
 
         for (const change of entry.changes || []) {
-          if (change.field !== "messages") continue;
-          const value = change.value;
-          if (!value?.messages) continue;
+          if (change.field === "messages") {
+            const value = change.value;
 
-          for (const msg of value.messages) {
-            if (msg.type !== "text") continue;
-            const senderPhone = msg.from;
-            const messageBody = msg.text?.body;
-            if (!senderPhone || !messageBody) continue;
-
-            let [contact] = await db.select().from(contacts)
-              .where(and(
-                eq(contacts.containerId, container.id),
-                eq(contacts.phone, senderPhone)
-              ));
-
-            if (!contact) {
-              const senderName = value.contacts?.[0]?.profile?.name || senderPhone;
-              [contact] = await db.insert(contacts).values({
-                containerId: container.id,
-                name: senderName,
-                phone: senderPhone,
-              }).returning();
+            if (value?.statuses) {
+              for (const status of value.statuses) {
+                console.log("Webhook: message status update:", { messageId: status.id, status: status.status, recipient: status.recipient_id });
+              }
+              continue;
             }
 
-            let [conv] = await db.select().from(conversations)
-              .where(and(
-                eq(conversations.containerId, container.id),
-                eq(conversations.contactId, contact.id)
-              ));
+            if (!value?.messages) continue;
 
-            if (!conv) {
-              [conv] = await db.insert(conversations).values({
-                containerId: container.id,
-                contactId: contact.id,
-                status: "open",
-              }).returning();
-            }
+            for (const msg of value.messages) {
+              const senderPhone = msg.from;
+              if (!senderPhone) continue;
 
-            const newMessage = await storage.createMessage({
-              conversationId: conv.id,
-              content: messageBody,
-              isFromContact: true,
-              whatsappMessageId: msg.id,
-            });
+              let messageContent = "";
+              if (msg.type === "text") {
+                messageContent = msg.text?.body || "";
+              } else if (msg.type === "image") {
+                messageContent = `[Image]${msg.image?.caption ? ` ${msg.image.caption}` : ""}`;
+              } else if (msg.type === "video") {
+                messageContent = `[Video]${msg.video?.caption ? ` ${msg.video.caption}` : ""}`;
+              } else if (msg.type === "audio") {
+                messageContent = "[Audio message]";
+              } else if (msg.type === "document") {
+                messageContent = `[Document] ${msg.document?.filename || "file"}`;
+              } else if (msg.type === "sticker") {
+                messageContent = "[Sticker]";
+              } else if (msg.type === "location") {
+                messageContent = `[Location] ${msg.location?.latitude}, ${msg.location?.longitude}`;
+              } else if (msg.type === "contacts") {
+                messageContent = "[Contact shared]";
+              } else if (msg.type === "reaction") {
+                console.log("Webhook: reaction received:", msg.reaction);
+                continue;
+              } else {
+                messageContent = `[${msg.type}] message`;
+              }
 
-            if (conv.assignedTo) {
-              broadcastToUser(conv.assignedTo, {
+              if (!messageContent) continue;
+
+              console.log("Webhook: incoming message from", senderPhone, "type:", msg.type, "preview:", messageContent.slice(0, 50));
+
+              let [contact] = await db.select().from(contacts)
+                .where(and(
+                  eq(contacts.containerId, container.id),
+                  eq(contacts.phone, senderPhone)
+                ));
+
+              if (!contact) {
+                const senderName = value.contacts?.[0]?.profile?.name || senderPhone;
+                [contact] = await db.insert(contacts).values({
+                  containerId: container.id,
+                  name: senderName,
+                  phone: senderPhone,
+                }).returning();
+                console.log("Webhook: created new contact:", contact.id, contact.name);
+              }
+
+              let [conv] = await db.select().from(conversations)
+                .where(and(
+                  eq(conversations.containerId, container.id),
+                  eq(conversations.contactId, contact.id)
+                ));
+
+              if (!conv) {
+                [conv] = await db.insert(conversations).values({
+                  containerId: container.id,
+                  contactId: contact.id,
+                  status: "open",
+                }).returning();
+                console.log("Webhook: created new conversation:", conv.id);
+              }
+
+              const newMessage = await storage.createMessage({
+                conversationId: conv.id,
+                content: messageContent,
+                isFromContact: true,
+                whatsappMessageId: msg.id,
+              });
+              console.log("Webhook: stored message:", newMessage.id);
+
+              if (conv.assignedTo) {
+                broadcastToUser(conv.assignedTo, {
+                  type: "new_message",
+                  message: newMessage,
+                  conversationId: conv.id,
+                  containerId: container.id,
+                });
+              }
+
+              broadcastToUser(container.ownerId, {
                 type: "new_message",
                 message: newMessage,
                 conversationId: conv.id,
+                containerId: container.id,
               });
             }
-
-            const owner = container.ownerId;
-            broadcastToUser(owner, {
-              type: "new_message",
-              message: newMessage,
-              conversationId: conv.id,
-            });
+          } else {
+            console.log("Webhook: unhandled change field:", change.field);
           }
         }
       }
 
       res.status(200).json({ status: "ok" });
     } catch (e: any) {
-      console.error("Webhook processing error:", e.message);
+      console.error("Webhook processing error:", e.message, e.stack);
       res.status(200).json({ status: "ok" });
     }
   });

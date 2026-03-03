@@ -137,6 +137,21 @@ export default function Settings() {
     },
   });
 
+  const clearDemoDataMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/containers/${id}/demo-data`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/containers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", activeContainer?.id] });
+      toast({ title: "Demo data cleared", description: `Removed ${data.cleared} demo contacts and related data.` });
+    },
+    onError: (e: any) => {
+      toast({ title: "Failed to clear demo data", description: e.message, variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (activeContainer) {
       setApiForm({
@@ -391,6 +406,32 @@ export default function Settings() {
                 </Card>
               ))}
             </div>
+          )}
+
+          {activeContainer && (
+            <Card className="p-6 mt-6 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-sm">Clear Demo Data</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Remove all sample contacts, conversations, templates, campaigns, and deals from this workspace. Real data from WhatsApp will not be affected.</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => clearDemoDataMutation.mutate(activeContainer.id)}
+                  disabled={clearDemoDataMutation.isPending}
+                  className="border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 shrink-0 ml-4"
+                  data-testid="button-clear-demo-data"
+                >
+                  {clearDemoDataMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Clear Demo Data
+                </Button>
+              </div>
+            </Card>
           )}
         </TabsContent>
 

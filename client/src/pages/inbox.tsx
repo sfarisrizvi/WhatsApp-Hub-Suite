@@ -71,10 +71,13 @@ export default function Inbox() {
   });
 
   useEffect(() => {
-    if (lastMessage?.type === "new_message" && lastMessage.conversationId === selectedConv) {
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConv, "messages"] });
+    if (lastMessage?.type === "new_message") {
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
+      if (lastMessage.conversationId === selectedConv) {
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConv, "messages"] });
+      }
     }
-  }, [lastMessage, selectedConv]);
+  }, [lastMessage, selectedConv, cid]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

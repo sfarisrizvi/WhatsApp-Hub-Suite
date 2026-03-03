@@ -40,8 +40,9 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - **Frontend**: `client/src/lib/facebook-sdk.ts` loads FB SDK dynamically, `launchWhatsAppSignup(configId)` triggers the signup popup and captures WA_EMBEDDED_SIGNUP session data
 - **Backend**: `POST /api/whatsapp/embedded-signup` handles OAuth token exchange with ownership verification; `GET /api/whatsapp/app-config` returns public app ID + config ID
 - **Settings UI**: Dual-mode — primary "Connect with Facebook" button (Embedded Signup), collapsible "Manual Setup (Advanced)" fallback with step-by-step guide
-- **Security**: Container ownership verified before updates; META_APP_SECRET kept server-side only (not stored in containers); webhook URL derived from REPLIT_DEV_DOMAIN env var
-- **Environment secrets**: META_APP_ID, META_APP_SECRET, META_CONFIG_ID
+- **Security**: Container ownership verified before updates; META_APP_SECRET kept server-side only (not stored in containers); webhook URL derived from request host header (works correctly in both dev and production)
+- **Webhook**: Global WEBHOOK_VERIFY_TOKEN env var used as fallback for Meta App Dashboard manual setup; per-container tokens also supported; webhook info displayed in Settings page
+- **Environment secrets**: META_APP_ID, META_APP_SECRET, META_CONFIG_ID, WEBHOOK_VERIFY_TOKEN
 
 ## Project Structure
 ```
@@ -93,6 +94,7 @@ users (with email, username, password), sessions, containers (with phoneNumberId
 - POST /api/webhook - Receive incoming WhatsApp messages
 - POST /api/containers/:id/test-connection - Test WhatsApp API credentials
 - GET /api/whatsapp/app-config - Public Meta App ID + Config ID for FB SDK
+- GET /api/whatsapp/webhook-info - Returns webhook callback URL + verify token (authenticated)
 - POST /api/whatsapp/embedded-signup - OAuth token exchange + auto-configure container
 
 ## API Endpoints (Auth)
@@ -105,3 +107,4 @@ users (with email, username, password), sessions, containers (with phoneNumberId
 - DATABASE_URL (auto-provisioned)
 - SESSION_SECRET
 - META_APP_ID, META_APP_SECRET, META_CONFIG_ID (Meta Embedded Signup)
+- WEBHOOK_VERIFY_TOKEN (global webhook verification token for Meta App Dashboard)

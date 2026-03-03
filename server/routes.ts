@@ -514,7 +514,15 @@ export async function registerRoutes(
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
 
+    console.log("Webhook verification attempt:", { mode, token: token ? `${String(token).slice(0, 8)}...` : "none", challenge: challenge ? "present" : "missing" });
+
     if (mode === "subscribe" && token) {
+      const globalToken = process.env.WEBHOOK_VERIFY_TOKEN;
+      if (globalToken && token === globalToken) {
+        console.log("Webhook verified with global verify token");
+        return res.status(200).send(challenge);
+      }
+
       const allContainers = await db.select().from(containers);
       const match = allContainers.find(c => c.webhookVerifyToken === token);
       if (match) {
@@ -522,6 +530,7 @@ export async function registerRoutes(
         return res.status(200).send(challenge);
       }
     }
+    console.log("Webhook verification failed — token mismatch");
     res.status(403).send("Forbidden");
   });
 
@@ -663,6 +672,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/whatsapp/webhook-info", isAuthenticated, (req, res) => {
+    const hostHeader = req.headers.host || req.headers["x-forwarded-host"];
+    const baseUrl = hostHeader
+      ? `https://${hostHeader}`
+      : process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+    const callbackUrl = `${baseUrl}/api/webhook`;
+    const verifyToken = process.env.WEBHOOK_VERIFY_TOKEN || "";
+    res.json({ callbackUrl, verifyToken });
+  });
+
   // WhatsApp Embedded Signup - public config endpoint
   app.get("/api/whatsapp/app-config", (_req, res) => {
     const appId = process.env.META_APP_ID;
@@ -753,13 +774,15 @@ export async function registerRoutes(
         }
       }
 
-      const webhookVerifyToken = crypto.randomBytes(16).toString("hex");
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : process.env.REPL_SLUG
-          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-          : `https://${req.headers.host}`;
+      const webhookVerifyToken = process.env.WEBHOOK_VERIFY_TOKEN || crypto.randomBytes(16).toString("hex");
+      const hostHeader = req.headers.host || req.headers["x-forwarded-host"];
+      const baseUrl = hostHeader
+        ? `https://${hostHeader}`
+        : process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
       const webhookUrl = `${baseUrl}/api/webhook`;
+      console.log("Registering webhook URL:", webhookUrl);
 
       if (resolvedWabaId) {
         try {

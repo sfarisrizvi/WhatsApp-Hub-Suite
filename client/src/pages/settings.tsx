@@ -32,6 +32,47 @@ import { SiFacebook } from "react-icons/si";
 import type { Container, ContainerMember } from "@shared/schema";
 import { loadFacebookSDK, launchWhatsAppSignup } from "@/lib/facebook-sdk";
 
+function WebhookInfoCard({ copyToClipboard }: { copyToClipboard: (text: string) => void }) {
+  const { data: webhookInfo } = useQuery<{ callbackUrl: string; verifyToken: string }>({
+    queryKey: ["/api/whatsapp/webhook-info"],
+  });
+
+  const callbackUrl = webhookInfo?.callbackUrl || `${window.location.origin}/api/webhook`;
+  const verifyToken = webhookInfo?.verifyToken || "";
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Globe className="h-5 w-5 text-[#25D366]" />
+        <h3 className="font-semibold">Webhook Configuration</h3>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">Use these values when configuring the webhook in your Meta App Dashboard.</p>
+      <div className="space-y-3">
+        <div>
+          <Label className="text-xs text-muted-foreground">Callback URL</Label>
+          <div className="flex items-center gap-2 mt-1">
+            <code className="text-xs bg-muted px-2 py-1.5 rounded font-mono flex-1 truncate" data-testid="text-global-webhook-url">{callbackUrl}</code>
+            <Button size="sm" variant="outline" onClick={() => copyToClipboard(callbackUrl)} data-testid="button-copy-global-webhook">
+              <Copy className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground">Verify Token</Label>
+          <div className="flex items-center gap-2 mt-1">
+            <code className="text-xs bg-muted px-2 py-1.5 rounded font-mono flex-1 truncate" data-testid="text-global-verify-token">{verifyToken || "Not configured"}</code>
+            {verifyToken && (
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(verifyToken)} data-testid="button-copy-global-verify-token">
+                <Copy className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { user } = useAuth();
   const { activeContainer, setActiveContainer } = useContainer();
@@ -477,6 +518,8 @@ export default function Settings() {
               </div>
             )}
           </Card>
+
+          <WebhookInfoCard copyToClipboard={copyToClipboard} />
 
           <Collapsible open={showManualSetup} onOpenChange={setShowManualSetup}>
             <CollapsibleTrigger asChild>

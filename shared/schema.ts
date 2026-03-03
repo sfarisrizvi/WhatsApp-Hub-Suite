@@ -11,7 +11,7 @@ export const conversationStatusEnum = pgEnum("conversation_status", ["open", "pe
 export const dealStageEnum = pgEnum("deal_stage", ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]);
 export const campaignStatusEnum = pgEnum("campaign_status", ["draft", "scheduled", "sending", "sent", "failed"]);
 export const orderStatusEnum = pgEnum("order_status", ["pending", "confirmed", "shipped", "delivered", "cancelled"]);
-export const templateStatusEnum = pgEnum("template_status", ["draft", "approved", "rejected"]);
+export const templateStatusEnum = pgEnum("template_status", ["draft", "pending", "approved", "rejected"]);
 
 export const containers = pgTable("containers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -54,12 +54,19 @@ export const templates = pgTable("templates", {
   containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   category: text("category").notNull().default("marketing"),
+  templateType: text("template_type").notNull().default("standard"),
+  language: text("language").notNull().default("en"),
   body: text("body").notNull(),
   headerType: text("header_type"),
   headerContent: text("header_content"),
   footerText: text("footer_text"),
+  buttons: jsonb("buttons").default(sql`'[]'::jsonb`),
+  offerText: text("offer_text"),
+  offerExpiry: timestamp("offer_expiry"),
+  carouselCards: jsonb("carousel_cards").default(sql`'[]'::jsonb`),
   variables: text("variables").array().default(sql`'{}'::text[]`),
   status: templateStatusEnum("status").default("draft"),
+  metaTemplateId: text("meta_template_id"),
   isPremade: boolean("is_premade").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });

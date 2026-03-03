@@ -188,6 +188,107 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.post("/api/templates/:id/submit-to-meta", isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.getTemplate(req.params.id);
+      if (!template) return res.status(404).json({ message: "Template not found" });
+
+      const container = await storage.getContainer(template.containerId);
+      if (!container || !container.wabaId || !container.apiKey) {
+        return res.status(400).json({ message: "WhatsApp Business Account not configured. Connect your account in Settings first." });
+      }
+
+      const components: any[] = [];
+
+      if (template.headerType && template.headerType !== "none") {
+        if (template.headerType === "text") {
+          components.push({ type: "HEADER", format: "TEXT", text: template.headerContent || "" });
+        } else if (["image", "video", "document"].includes(template.headerType)) {
+          components.push({ type: "HEADER", format: template.headerType.toUpperCase() });
+        }
+      }
+
+      components.push({ type: "BODY", text: template.body });
+
+      if (template.footerText) {
+        components.push({ type: "FOOTER", text: template.footerText });
+      }
+
+      const buttons = (template.buttons as any[]) || [];
+      if (buttons.length > 0) {
+        const metaButtons = buttons.map((btn: any) => {
+          if (btn.type === "URL") return { type: "URL", text: btn.text, url: btn.url };
+          if (btn.type === "PHONE_NUMBER") return { type: "PHONE_NUMBER", text: btn.text, phone_number: btn.phoneNumber };
+          if (btn.type === "QUICK_REPLY") return { type: "QUICK_REPLY", text: btn.text };
+          if (btn.type === "COPY_CODE") return { type: "COPY_CODE", example: btn.example || "" };
+          return { type: "QUICK_REPLY", text: btn.text };
+        });
+        components.push({ type: "BUTTONS", buttons: metaButtons });
+      }
+
+      if (template.templateType === "limited_offer") {
+        const limitedAction: any = { type: "LIMITED_TIME_OFFER", text: template.offerText || "" };
+        if (template.offerExpiry) limitedAction.has_expiration = true;
+        components.push(limitedAction);
+      }
+
+      if (template.templateType === "carousel") {
+        const cards = (template.carouselCards as any[]) || [];
+        const carouselComponents = cards.map((card: any) => ({
+          type: "CAROUSEL_CARD",
+          components: [
+            ...(card.imageUrl ? [{ type: "HEADER", format: "IMAGE" }] : []),
+            { type: "BODY", text: card.body || "" },
+            ...(card.buttons?.length ? [{
+              type: "BUTTONS",
+              buttons: card.buttons.map((b: any) => {
+                if (b.type === "URL") return { type: "URL", text: b.text, url: b.url };
+                return { type: "QUICK_REPLY", text: b.text };
+              })
+            }] : []),
+          ],
+        }));
+        components.push({ type: "CAROUSEL", cards: carouselComponents });
+      }
+
+      const payload: any = {
+        name: template.name.toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+        category: template.category.toUpperCase(),
+        language: template.language || "en",
+        components,
+      };
+
+      const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
+      const metaRes = await fetch(`${endpoint}/${container.wabaId}/message_templates`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${container.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const metaData = await metaRes.json();
+
+      if (metaRes.ok && metaData.id) {
+        await storage.updateTemplate(template.id, {
+          status: "pending",
+          metaTemplateId: metaData.id,
+        });
+        res.json({ success: true, metaTemplateId: metaData.id, status: metaData.status });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: metaData.error?.message || "Failed to submit template to Meta",
+          error: metaData.error,
+        });
+      }
+    } catch (e: any) {
+      console.error("Meta template submission error:", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // Campaigns
   app.get("/api/containers/:containerId/campaigns", isAuthenticated, async (req: any, res) => {
     try {

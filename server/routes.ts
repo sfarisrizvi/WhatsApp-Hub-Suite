@@ -399,7 +399,16 @@ export async function registerRoutes(
 
   app.post("/api/containers/:containerId/conversations", isAuthenticated, async (req: any, res) => {
     try {
-      const conv = await storage.createConversation({ ...req.body, containerId: req.params.containerId });
+      const containerId = req.params.containerId;
+      const contactId = req.body.contactId;
+      if (contactId) {
+        const existing = await db.select().from(conversations)
+          .where(and(eq(conversations.containerId, containerId), eq(conversations.contactId, contactId)));
+        if (existing.length > 0) {
+          return res.json(existing[0]);
+        }
+      }
+      const conv = await storage.createConversation({ ...req.body, containerId });
       res.json(conv);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -475,9 +484,13 @@ export async function registerRoutes(
 
       const message = await storage.createMessage(messageData);
 
+      await storage.updateConversation(conv.id, { lastMessageAt: new Date() });
+
       if (conv.assignedTo && conv.assignedTo !== userId) {
         broadcastToUser(conv.assignedTo, { type: 'new_message', message, conversationId: conv.id });
       }
+
+      broadcastToUser(conv.containerId, { type: 'new_message', message, conversationId: conv.id, containerId: conv.containerId });
 
       res.json({ ...message, whatsappError });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -611,7 +624,7 @@ export async function registerRoutes(
         const signingSecret = container.appSecret || process.env.META_APP_SECRET;
         if (signingSecret) {
           if (!signature) {
-            console.warn("Webhook: missing signature for container:", container.id);
+            console.warn("Webhook: missing x-hub-signature-256 header for container:", container.id, "— skipping");
             continue;
           }
           const rawBody = (req as any).rawBody
@@ -623,11 +636,11 @@ export async function registerRoutes(
             .digest("hex");
           try {
             if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-              console.warn("Webhook: signature mismatch for container:", container.id);
+              console.warn("Webhook: signature mismatch for container:", container.id, "expected:", expected.slice(0, 20) + "...", "got:", (signature || "").slice(0, 20) + "...", "— skipping");
               continue;
             }
-          } catch {
-            console.warn("Webhook: signature validation error for container:", container.id);
+          } catch (sigErr: any) {
+            console.warn("Webhook: signature validation error for container:", container.id, sigErr.message, "— skipping");
             continue;
           }
           console.log("Webhook: signature verified for container:", container.id);
@@ -641,7 +654,6 @@ export async function registerRoutes(
               for (const status of value.statuses) {
                 console.log("Webhook: message status update:", { messageId: status.id, status: status.status, recipient: status.recipient_id });
               }
-              continue;
             }
 
             if (!value?.messages) continue;

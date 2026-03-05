@@ -4,7 +4,6 @@ import { useContainer } from "@/lib/container-context";
 import { useAuth } from "@/hooks/use-auth";
 import { useWS } from "@/lib/ws-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +14,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { MessageSquare, Send, StickyNote, Search, User, Clock } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { MessageSquare, Send, StickyNote, Search, Plus } from "lucide-react";
 import type { Conversation, Contact, Message } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,10 +35,17 @@ export default function Inbox() {
   const [isNote, setIsNote] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showNewConv, setShowNewConv] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [], isLoading } = useQuery<ConvWithContact[]>({
     queryKey: ["/api/containers", cid, "conversations"],
+    enabled: !!cid,
+  });
+
+  const { data: allContacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/containers", cid, "contacts"],
     enabled: !!cid,
   });
 
@@ -56,6 +65,7 @@ export default function Inbox() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConv, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
       setMessageText("");
       if (data.whatsappError) {
         toast({ title: "Message saved but WhatsApp delivery failed", description: data.whatsappError, variant: "destructive" });
@@ -70,6 +80,24 @@ export default function Inbox() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
+    },
+  });
+
+  const createConvMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const existing = conversations.find(c => c.contactId === contactId);
+      if (existing) return existing;
+      const res = await apiRequest("POST", `/api/containers/${cid}/conversations`, {
+        contactId,
+        status: "open",
+      });
+      return res.json();
+    },
+    onSuccess: (conv) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
+      setSelectedConv(conv.id);
+      setShowNewConv(false);
+      setContactSearch("");
     },
   });
 
@@ -94,6 +122,15 @@ export default function Inbox() {
 
   const activeConv = conversations.find(c => c.id === selectedConv);
 
+  const existingContactIds = new Set(conversations.map(c => c.contactId));
+  const filteredContacts = allContacts.filter(c => {
+    if (contactSearch) {
+      const q = contactSearch.toLowerCase();
+      return c.name.toLowerCase().includes(q) || c.phone.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
   if (!activeContainer) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -108,7 +145,18 @@ export default function Inbox() {
         <div className="p-3 border-b space-y-3">
           <div className="flex items-center justify-between gap-1">
             <h2 className="font-semibold text-sm">Inbox</h2>
-            <Badge variant="secondary">{conversations.length}</Badge>
+            <div className="flex items-center gap-1">
+              <Badge variant="secondary">{conversations.length}</Badge>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setShowNewConv(true)}
+                data-testid="button-new-conversation"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -139,6 +187,16 @@ export default function Inbox() {
             <div className="p-6 text-center">
               <MessageSquare className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">No conversations</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => setShowNewConv(true)}
+                data-testid="button-new-conversation-empty"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Start a conversation
+              </Button>
             </div>
           ) : (
             <div>
@@ -183,6 +241,15 @@ export default function Inbox() {
             <div className="text-center">
               <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground">Select a conversation to start messaging</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => setShowNewConv(true)}
+                data-testid="button-new-conversation-center"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Conversation
+              </Button>
             </div>
           </div>
         ) : (
@@ -298,6 +365,62 @@ export default function Inbox() {
           </>
         )}
       </div>
+
+      <Dialog open={showNewConv} onOpenChange={setShowNewConv}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Conversation</DialogTitle>
+            <DialogDescription>Select a contact to start a conversation</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search contacts..."
+                className="pl-8"
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                data-testid="input-search-contacts-dialog"
+              />
+            </div>
+            <ScrollArea className="max-h-[300px]">
+              {filteredContacts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {allContacts.length === 0 ? "No contacts yet. Add contacts first." : "No contacts match your search."}
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {filteredContacts.map((contact) => {
+                    const hasConv = existingContactIds.has(contact.id);
+                    return (
+                      <button
+                        key={contact.id}
+                        onClick={() => createConvMutation.mutate(contact.id)}
+                        disabled={createConvMutation.isPending}
+                        className="w-full text-left p-3 rounded-lg hover:bg-accent transition-colors flex items-center gap-3"
+                        data-testid={`contact-pick-${contact.id}`}
+                      >
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                            {contact.name[0]?.toUpperCase() || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{contact.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{contact.phone}</p>
+                        </div>
+                        {hasConv && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0">Active</Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

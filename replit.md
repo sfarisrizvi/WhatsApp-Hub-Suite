@@ -17,7 +17,7 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - WhatsApp message templates (Standard, Limited Offer, Carousel) with phone mockup preview
 - Campaign broadcasting with audience targeting and scheduling
 - Automation rules (welcome, keyword, away messages)
-- Shared team inbox with real-time messaging and internal notes
+- Shared team inbox with 3-panel layout (conversation list, chat, contact details), real-time messaging, internal notes, WhatsApp-style message bubbles with date grouping
 - Sales pipeline (drag-and-drop kanban board)
 - Order tracking and e-commerce features
 - Campaign analytics with charts (Recharts)

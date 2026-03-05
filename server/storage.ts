@@ -246,14 +246,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Conversations
-  async getConversations(containerId: string): Promise<(Conversation & { contact: Contact | null })[]> {
+  async getConversations(containerId: string): Promise<(Conversation & { contact: Contact | null; lastMessage?: Message | null })[]> {
     const convs = await db.select().from(conversations)
       .where(eq(conversations.containerId, containerId))
       .orderBy(desc(conversations.lastMessageAt));
     const result = [];
     for (const conv of convs) {
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, conv.contactId));
-      result.push({ ...conv, contact: contact || null });
+      const lastMsgs = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      result.push({ ...conv, contact: contact || null, lastMessage: lastMsgs[0] || null });
     }
     return result;
   }

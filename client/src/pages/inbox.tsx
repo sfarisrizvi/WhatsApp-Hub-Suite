@@ -54,9 +54,12 @@ export default function Inbox() {
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConv, "messages"] });
       setMessageText("");
+      if (data.whatsappError) {
+        toast({ title: "Message saved but WhatsApp delivery failed", description: data.whatsappError, variant: "destructive" });
+      }
     },
   });
 

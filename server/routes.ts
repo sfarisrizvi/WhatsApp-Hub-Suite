@@ -431,6 +431,8 @@ export async function registerRoutes(
         senderId: req.body.isInternalNote ? userId : req.body.senderId || userId,
       };
 
+      let whatsappError: string | null = null;
+
       if (!req.body.isInternalNote && !req.body.isFromContact) {
         const container = await storage.getContainer(conv.containerId);
         if (container?.isConfigured && container.phoneNumberId && container.apiKey) {
@@ -440,6 +442,7 @@ export async function registerRoutes(
               const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
               const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}/messages`;
               const recipientPhone = contact.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "");
+              console.log("WhatsApp send:", { url, to: recipientPhone, contentLength: req.body.content?.length });
               const waRes = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -455,11 +458,16 @@ export async function registerRoutes(
                 }),
               });
               const waData = await waRes.json();
+              console.log("WhatsApp response:", { status: waRes.status, data: JSON.stringify(waData).slice(0, 500) });
               if (waData.messages?.[0]?.id) {
                 messageData.whatsappMessageId = waData.messages[0].id;
+              } else if (waData.error) {
+                whatsappError = `WhatsApp API error: ${waData.error.message || waData.error.type || "Unknown error"} (code: ${waData.error.code || "N/A"})`;
+                console.error("WhatsApp send failed:", whatsappError);
               }
             } catch (waErr: any) {
-              console.error("WhatsApp API error:", waErr.message);
+              whatsappError = `WhatsApp connection error: ${waErr.message}`;
+              console.error("WhatsApp send exception:", waErr.message);
             }
           }
         }
@@ -471,7 +479,7 @@ export async function registerRoutes(
         broadcastToUser(conv.assignedTo, { type: 'new_message', message, conversationId: conv.id });
       }
 
-      res.json(message);
+      res.json({ ...message, whatsappError });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
@@ -668,22 +676,27 @@ export async function registerRoutes(
 
               if (!messageContent) continue;
 
-              console.log("Webhook: incoming message from", senderPhone, "type:", msg.type, "preview:", messageContent.slice(0, 50));
+              const normalizedSenderPhone = senderPhone.replace(/[^0-9]/g, "");
+              console.log("Webhook: incoming message from", senderPhone, "(normalized:", normalizedSenderPhone, ") type:", msg.type, "preview:", messageContent.slice(0, 50));
 
-              let [contact] = await db.select().from(contacts)
-                .where(and(
-                  eq(contacts.containerId, container.id),
-                  eq(contacts.phone, senderPhone)
-                ));
+              const containerContacts = await db.select().from(contacts)
+                .where(eq(contacts.containerId, container.id));
+              let contact = containerContacts.find(c => {
+                const normalizedStored = c.phone.replace(/[^0-9]/g, "");
+                return normalizedStored === normalizedSenderPhone || normalizedSenderPhone.endsWith(normalizedStored) || normalizedStored.endsWith(normalizedSenderPhone);
+              });
 
               if (!contact) {
                 const senderName = value.contacts?.[0]?.profile?.name || senderPhone;
+                const formattedPhone = senderPhone.startsWith("+") ? senderPhone : `+${senderPhone}`;
                 [contact] = await db.insert(contacts).values({
                   containerId: container.id,
                   name: senderName,
-                  phone: senderPhone,
+                  phone: formattedPhone,
                 }).returning();
-                console.log("Webhook: created new contact:", contact.id, contact.name);
+                console.log("Webhook: created new contact:", contact.id, contact.name, contact.phone);
+              } else {
+                console.log("Webhook: matched existing contact:", contact.id, contact.name, contact.phone);
               }
 
               let [conv] = await db.select().from(conversations)

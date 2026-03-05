@@ -73,6 +73,7 @@ export default function Inbox() {
   const { data: conversations = [], isLoading } = useQuery<ConvWithContact[]>({
     queryKey: ["/api/containers", cid, "conversations"],
     enabled: !!cid,
+    refetchInterval: 5000,
   });
 
   const { data: allContacts = [] } = useQuery<Contact[]>({
@@ -83,6 +84,7 @@ export default function Inbox() {
   const { data: messages = [], isLoading: loadingMessages } = useQuery<Message[]>({
     queryKey: ["/api/conversations", selectedConv, "messages"],
     enabled: !!selectedConv,
+    refetchInterval: 3000,
   });
 
   const sendMutation = useMutation({
@@ -152,8 +154,12 @@ export default function Inbox() {
     }
   }, [lastMessage, selectedConv, cid]);
 
+  const prevMessageCount = useRef(0);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > prevMessageCount.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessageCount.current = messages.length;
   }, [messages]);
 
   const filteredConvs = conversations.filter(c => {

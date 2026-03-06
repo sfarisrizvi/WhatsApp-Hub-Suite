@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useContainer } from "@/lib/container-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -738,6 +738,17 @@ export default function Templates() {
       toast({ title: "Sync failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const hasSyncedRef = useRef(false);
+  useEffect(() => {
+    if (templates.length > 0 && cid && !hasSyncedRef.current) {
+      const hasPending = templates.some(t => t.status === "pending");
+      if (hasPending) {
+        hasSyncedRef.current = true;
+        syncAllMutation.mutate();
+      }
+    }
+  }, [templates, cid]);
 
   const handleUsePremade = (tpl: typeof premadeTemplates[0]) => {
     setEditTemplate(null);

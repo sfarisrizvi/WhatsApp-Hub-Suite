@@ -852,6 +852,45 @@ export async function registerRoutes(
                 containerId: container.id,
               });
             }
+          } else if (change.field === "message_template_status_update") {
+            const value = change.value;
+            console.log("Webhook: template status update received:", JSON.stringify(value));
+            
+            if (value?.message_template_name && value?.event) {
+              const templateName = value.message_template_name;
+              const metaStatus = value.event;
+              const metaTemplateId = value.message_template_id?.toString();
+              
+              let mappedStatus: string;
+              if (metaStatus === "APPROVED") {
+                mappedStatus = "approved";
+              } else if (metaStatus === "REJECTED" || metaStatus === "DISABLED" || metaStatus === "FLAGGED") {
+                mappedStatus = "rejected";
+              } else if (metaStatus === "PENDING" || metaStatus === "IN_APPEAL" || metaStatus === "PENDING_DELETION") {
+                mappedStatus = "pending";
+              } else {
+                mappedStatus = metaStatus.toLowerCase();
+              }
+
+              const containerTemplates = await storage.getTemplates(container.id);
+              const normalizedWebhookName = templateName.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+              
+              const matchedTemplate = containerTemplates.find(t => {
+                const normalizedLocalName = t.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+                return normalizedLocalName === normalizedWebhookName || 
+                       (metaTemplateId && t.metaTemplateId === metaTemplateId);
+              });
+
+              if (matchedTemplate) {
+                await storage.updateTemplate(matchedTemplate.id, { 
+                  status: mappedStatus as any,
+                  metaTemplateId: metaTemplateId || matchedTemplate.metaTemplateId,
+                });
+                console.log(`Webhook: updated template "${matchedTemplate.name}" status to "${mappedStatus}"`);
+              } else {
+                console.log(`Webhook: no matching local template found for "${templateName}" in container ${container.id}`);
+              }
+            }
           } else {
             console.log("Webhook: unhandled change field:", change.field);
           }

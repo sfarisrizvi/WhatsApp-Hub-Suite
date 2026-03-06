@@ -32,7 +32,7 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - **Outbound**: Messages sent from inbox are forwarded to WhatsApp Cloud API when workspace is configured (phoneNumberId + apiKey)
 - **Inbound**: Webhook endpoints at GET/POST `/api/webhook` receive incoming messages from Meta
 - **Message Types**: Text, image, video, audio, document, sticker, location, contacts (all logged and stored)
-- **Status Updates**: Delivered/read status updates logged from Meta
+- **Status Updates**: Delivered/read status updates logged from Meta; template status updates (approved/rejected) auto-processed via `message_template_status_update` webhook field
 - **Security**: Webhook payloads verified using App Secret (HMAC-SHA256, constant-time comparison); falls back to server-level META_APP_SECRET
 - **Container fields**: phoneNumberId, wabaId, apiKey, apiEndpoint, appSecret, webhookVerifyToken
 - **Messages table**: whatsappMessageId tracks Meta's message IDs; mediaType stores media type (image/video/audio/document/sticker)

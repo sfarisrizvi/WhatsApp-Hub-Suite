@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useContainer } from "@/lib/container-context";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,6 +9,7 @@ import type { Contact, Campaign, Conversation, Order } from "@shared/schema";
 
 export default function Dashboard() {
   const { activeContainer } = useContainer();
+  const [, navigate] = useLocation();
   const cid = activeContainer?.id;
 
   const { data: contacts = [], isLoading: loadingContacts } = useQuery<Contact[]>({
@@ -62,7 +64,7 @@ export default function Dashboard() {
     <div className="p-6 space-y-6 overflow-y-auto h-full">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">{activeContainer.name} overview</p>
+        <p className="text-muted-foreground text-sm mt-1">{activeContainer.businessName || activeContainer.name} overview</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -97,7 +99,12 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {conversations.slice(0, 5).map((conv) => (
-                <div key={conv.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0">
+                <div
+                  key={conv.id}
+                  className="flex items-center justify-between gap-2 py-2 border-b last:border-0 cursor-pointer hover-elevate rounded-md px-2"
+                  data-testid={`link-conversation-${conv.id}`}
+                  onClick={() => navigate(`/inbox?conversation=${conv.id}`)}
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="text-xs font-medium text-primary">
@@ -131,7 +138,12 @@ export default function Dashboard() {
                 const total = campaign.totalRecipients || 1;
                 const deliveryRate = Math.round(((campaign.delivered || 0) / total) * 100);
                 return (
-                  <div key={campaign.id} className="py-2 border-b last:border-0">
+                  <div
+                    key={campaign.id}
+                    className="py-2 border-b last:border-0 cursor-pointer hover-elevate rounded-md px-2"
+                    data-testid={`link-campaign-${campaign.id}`}
+                    onClick={() => navigate("/campaigns")}
+                  >
                     <div className="flex items-center justify-between gap-1 mb-1">
                       <p className="text-sm font-medium truncate">{campaign.name}</p>
                       <Badge variant="secondary" className="shrink-0">{campaign.status}</Badge>

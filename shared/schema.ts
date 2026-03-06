@@ -104,6 +104,7 @@ export const conversations = pgTable("conversations", {
   contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
   assignedTo: varchar("assigned_to").references(() => users.id),
   status: conversationStatusEnum("status").default("open"),
+  unreadCount: integer("unread_count").default(0),
   lastMessageAt: timestamp("last_message_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -115,6 +116,7 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(),
   isFromContact: boolean("is_from_contact").default(false),
   isInternalNote: boolean("is_internal_note").default(false),
+  mediaType: text("media_type"),
   mediaUrl: text("media_url"),
   whatsappMessageId: text("whatsapp_message_id"),
   createdAt: timestamp("created_at").defaultNow(),

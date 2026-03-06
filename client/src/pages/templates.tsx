@@ -21,7 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Send, Trash2, Edit, FileText, Copy, Eye, ArrowLeft,
-  LayoutGrid, Timer, Layers, AlertCircle, CheckCircle, Clock, X,
+  LayoutGrid, Timer, Layers, AlertCircle, CheckCircle, Clock, X, RefreshCw,
   ExternalLink, Phone, Globe, MessageSquare, Smartphone, Mic, Camera,
   Smile, Paperclip, ChevronRight, Loader2,
 } from "lucide-react";
@@ -725,6 +725,20 @@ export default function Templates() {
     },
   });
 
+  const syncAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/containers/${cid}/templates/sync-all`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "templates"] });
+      toast({ title: data.synced > 0 ? `Synced ${data.synced} template(s)` : "All templates up to date" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleUsePremade = (tpl: typeof premadeTemplates[0]) => {
     setEditTemplate(null);
     setShowCreate(true);
@@ -783,9 +797,14 @@ export default function Templates() {
           <h1 className="text-2xl font-bold" data-testid="text-templates-title">Templates</h1>
           <p className="text-sm text-muted-foreground">{templates.length} templates</p>
         </div>
-        <Button size="sm" onClick={() => { setEditTemplate(null); setShowCreate(true); }} data-testid="button-create-template">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Create Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => syncAllMutation.mutate()} disabled={syncAllMutation.isPending} data-testid="button-sync-templates">
+            <RefreshCw className={`h-3.5 w-3.5 mr-1 ${syncAllMutation.isPending ? "animate-spin" : ""}`} /> Sync Status
+          </Button>
+          <Button size="sm" onClick={() => { setEditTemplate(null); setShowCreate(true); }} data-testid="button-create-template">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Create Template
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="my-templates">

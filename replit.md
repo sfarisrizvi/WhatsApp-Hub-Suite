@@ -17,7 +17,7 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - WhatsApp message templates (Standard, Limited Offer, Carousel) with phone mockup preview
 - Campaign broadcasting with audience targeting and scheduling
 - Automation rules (welcome, keyword, away messages)
-- Shared team inbox with 3-panel layout (conversation list, chat, contact details), real-time messaging, internal notes, WhatsApp-style message bubbles with date grouping
+- Shared team inbox with 3-panel layout (conversation list, chat, contact details), real-time messaging, separate internal notes input, WhatsApp-style message bubbles with date grouping, message status ticks (single=sent, double blue=delivered), media content display, unread count badges, label management in contact panel
 - Sales pipeline (drag-and-drop kanban board)
 - Order tracking and e-commerce features
 - Campaign analytics with charts (Recharts)
@@ -35,7 +35,8 @@ An all-in-one WhatsApp CRM automation platform with multi-container support, con
 - **Status Updates**: Delivered/read status updates logged from Meta
 - **Security**: Webhook payloads verified using App Secret (HMAC-SHA256, constant-time comparison); falls back to server-level META_APP_SECRET
 - **Container fields**: phoneNumberId, wabaId, apiKey, apiEndpoint, appSecret, webhookVerifyToken
-- **Messages table**: whatsappMessageId tracks Meta's message IDs
+- **Messages table**: whatsappMessageId tracks Meta's message IDs; mediaType stores media type (image/video/audio/document/sticker)
+- **Conversations table**: unreadCount tracks unread incoming messages per conversation
 - **Graceful fallback**: Unconfigured workspaces work in local/demo mode
 
 ## Known Issues
@@ -108,6 +109,9 @@ users (with email, username, password), sessions, containers (with phoneNumberId
 - GET /api/whatsapp/webhook-info - Returns webhook callback URL + verify token (authenticated)
 - POST /api/whatsapp/embedded-signup - OAuth token exchange + auto-configure container
 - DELETE /api/containers/:id/demo-data - Clear demo/sample data from workspace
+- POST /api/templates/:id/sync-status - Sync single template status from Meta
+- POST /api/containers/:id/templates/sync-all - Sync all template statuses from Meta
+- POST /api/conversations/:id/mark-read - Reset unread count to 0
 
 ## API Endpoints (Auth)
 - POST /api/auth/register - Create account (email, username, password)

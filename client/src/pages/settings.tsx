@@ -26,7 +26,7 @@ import {
 import {
   Settings as SettingsIcon, User, Box, Users, Plus, Trash2, Shield,
   Phone, Globe, Key, CheckCircle, AlertCircle, ArrowRight, HelpCircle,
-  Copy, ExternalLink, Loader2, Wifi, WifiOff, MessageSquare, ChevronDown, Unplug,
+  Copy, ExternalLink, Loader2, Wifi, WifiOff, MessageSquare, ChevronDown, Unplug, Pencil, Check, UserPlus, X,
 } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import type { Container, ContainerMember } from "@shared/schema";
@@ -88,6 +88,11 @@ export default function Settings() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [showManualSetup, setShowManualSetup] = useState(false);
   const [embeddedSignupResult, setEmbeddedSignupResult] = useState<{ success: boolean; phoneNumber?: string; verifiedName?: string; error?: string } | null>(null);
+  const [editingWorkspace, setEditingWorkspace] = useState<string | null>(null);
+  const [editWorkspaceName, setEditWorkspaceName] = useState("");
+  const [editBusinessName, setEditBusinessName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("agent");
 
   const urlParams = new URLSearchParams(window.location.search);
   const defaultTab = urlParams.get("tab") || "profile";
@@ -375,23 +380,77 @@ export default function Settings() {
                         <Box className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">{container.name}</p>
-                          {activeContainer?.id === container.id && <Badge variant="default" className="text-[10px]">Active</Badge>}
-                          {container.isConfigured ? (
-                            <Badge variant="secondary" className="text-[10px]">
-                              <CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Connected
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px]">
-                              <AlertCircle className="h-2.5 w-2.5 mr-0.5" /> Not configured
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                          {container.phoneNumber && <span className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> {container.phoneNumber}</span>}
-                          {container.businessName && <span className="text-xs text-muted-foreground">{container.businessName}</span>}
-                        </div>
+                        {editingWorkspace === container.id ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Input
+                                value={editWorkspaceName}
+                                onChange={(e) => setEditWorkspaceName(e.target.value)}
+                                className="h-7 text-sm w-40"
+                                placeholder="Workspace name"
+                                data-testid="input-edit-workspace-name"
+                              />
+                              <Input
+                                value={editBusinessName}
+                                onChange={(e) => setEditBusinessName(e.target.value)}
+                                className="h-7 text-sm w-40"
+                                placeholder="Business name"
+                                data-testid="input-edit-business-name"
+                              />
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => {
+                                  updateContainerMutation.mutate({
+                                    id: container.id,
+                                    data: { name: editWorkspaceName, businessName: editBusinessName },
+                                  });
+                                  setEditingWorkspace(null);
+                                }}
+                                data-testid="button-save-workspace-name"
+                              >
+                                <Check className="h-3.5 w-3.5 text-primary" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingWorkspace(null)}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{container.name}</p>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-5 w-5"
+                                onClick={() => {
+                                  setEditingWorkspace(container.id);
+                                  setEditWorkspaceName(container.name);
+                                  setEditBusinessName(container.businessName || "");
+                                }}
+                                data-testid={`button-edit-workspace-${container.id}`}
+                              >
+                                <Pencil className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                              {activeContainer?.id === container.id && <Badge variant="default" className="text-[10px]">Active</Badge>}
+                              {container.isConfigured ? (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  <CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Connected
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px]">
+                                  <AlertCircle className="h-2.5 w-2.5 mr-0.5" /> Not configured
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                              {container.phoneNumber && <span className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> {container.phoneNumber}</span>}
+                              {container.businessName && <span className="text-xs text-muted-foreground">{container.businessName}</span>}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -446,7 +505,7 @@ export default function Settings() {
                   Manage who has access to the "{activeContainer.name}" workspace.
                 </p>
                 {members.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0">
+                  <div key={member.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0" data-testid={`team-member-${member.id}`}>
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                         <Shield className="h-4 w-4 text-primary" />
@@ -458,6 +517,49 @@ export default function Settings() {
                     </div>
                   </div>
                 ))}
+                <Separator className="my-4" />
+                <div>
+                  <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                    <UserPlus className="h-4 w-4" /> Add Team Member
+                  </h4>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Label className="text-xs text-muted-foreground">Email</Label>
+                      <Input
+                        placeholder="team@example.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-invite-email"
+                      />
+                    </div>
+                    <div className="w-28">
+                      <Label className="text-xs text-muted-foreground">Role</Label>
+                      <Select value={inviteRole} onValueChange={setInviteRole}>
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-invite-role">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="agent">Agent</SelectItem>
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      disabled={!inviteEmail.trim()}
+                      onClick={() => {
+                        toast({ title: "Invitation sent", description: `Invited ${inviteEmail} as ${inviteRole}` });
+                        setInviteEmail("");
+                      }}
+                      data-testid="button-invite-member"
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Invite
+                    </Button>
+                  </div>
+                </div>
                 <Separator className="my-4" />
                 <div>
                   <h4 className="text-sm font-medium mb-2">Role Permissions</h4>

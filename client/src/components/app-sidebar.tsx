@@ -65,7 +65,9 @@ export function AppSidebar() {
           <img src={logoPath} alt="WA CRM" className="h-8 w-8 rounded-md" />
           <div className="flex flex-col">
             <span className="text-sm font-semibold" data-testid="text-app-name">WA CRM</span>
-            <span className="text-xs text-muted-foreground">Automation Platform</span>
+            <span className="text-xs text-muted-foreground truncate max-w-[140px]" data-testid="text-business-name">
+              {activeContainer?.businessName || activeContainer?.name || "Automation Platform"}
+            </span>
           </div>
         </div>
 

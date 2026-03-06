@@ -88,6 +88,21 @@ export default function Contacts() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadTemplate = () => {
+    const csv = [
+      "Name,Phone,Email,Tags",
+      "John Doe,+1234567890,john@example.com,vip;wholesale",
+      "Jane Smith,+0987654321,jane@example.com,new"
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "contacts_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -129,6 +144,9 @@ export default function Contacts() {
           <p className="text-sm text-muted-foreground">{contacts.length} contacts total</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handleDownloadTemplate} data-testid="button-download-csv-template">
+            <Download className="h-3.5 w-3.5 mr-1" /> CSV Template
+          </Button>
           <label className="cursor-pointer">
             <input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} data-testid="input-import-csv" />
             <Button variant="outline" size="sm" asChild>

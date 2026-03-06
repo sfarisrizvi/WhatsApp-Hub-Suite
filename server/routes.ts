@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
 import { containers, contacts, conversations, messages, deals, orders } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 const wsClients = new Map<string, Set<WebSocket>>();
 
@@ -331,6 +331,79 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/templates/:id/sync-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.getTemplate(req.params.id);
+      if (!template) return res.status(404).json({ message: "Template not found" });
+
+      const container = await storage.getContainer(template.containerId);
+      if (!container || !container.wabaId || !container.apiKey) {
+        return res.status(400).json({ message: "WhatsApp Business Account not configured" });
+      }
+
+      const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
+      const templateName = template.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      const metaRes = await fetch(
+        `${endpoint}/${container.wabaId}/message_templates?name=${templateName}`,
+        { headers: { Authorization: `Bearer ${container.apiKey}` } }
+      );
+      const metaData = await metaRes.json();
+
+      if (metaData.data && metaData.data.length > 0) {
+        const metaTemplate = metaData.data[0];
+        const newStatus = metaTemplate.status?.toLowerCase() || template.status;
+        if (newStatus !== template.status) {
+          await storage.updateTemplate(template.id, { status: newStatus });
+        }
+        res.json({ status: newStatus, metaStatus: metaTemplate.status });
+      } else {
+        res.json({ status: template.status, message: "Template not found on Meta" });
+      }
+    } catch (e: any) {
+      console.error("Template sync error:", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/containers/:containerId/templates/sync-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const container = await storage.getContainer(req.params.containerId);
+      if (!container || !container.wabaId || !container.apiKey) {
+        return res.status(400).json({ message: "WhatsApp Business Account not configured" });
+      }
+
+      const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
+      const metaRes = await fetch(
+        `${endpoint}/${container.wabaId}/message_templates?limit=100`,
+        { headers: { Authorization: `Bearer ${container.apiKey}` } }
+      );
+      const metaData = await metaRes.json();
+
+      if (!metaData.data) {
+        return res.json({ synced: 0 });
+      }
+
+      const templates = await storage.getTemplates(req.params.containerId);
+      let synced = 0;
+      for (const t of templates) {
+        if (t.status === "draft") continue;
+        const tName = t.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+        const match = metaData.data.find((m: any) => m.name === tName);
+        if (match) {
+          const newStatus = match.status?.toLowerCase() || t.status;
+          if (newStatus !== t.status) {
+            await storage.updateTemplate(t.id, { status: newStatus });
+            synced++;
+          }
+        }
+      }
+      res.json({ synced });
+    } catch (e: any) {
+      console.error("Template sync-all error:", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // Campaigns
   app.get("/api/containers/:containerId/campaigns", isAuthenticated, async (req: any, res) => {
     try {
@@ -417,6 +490,15 @@ export async function registerRoutes(
     try {
       const conv = await storage.updateConversation(req.params.id, req.body);
       res.json(conv);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/conversations/:id/mark-read", isAuthenticated, async (req: any, res) => {
+    try {
+      await db.update(conversations)
+        .set({ unreadCount: 0 })
+        .where(eq(conversations.id, req.params.id));
+      res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
@@ -726,13 +808,33 @@ export async function registerRoutes(
                 console.log("Webhook: created new conversation:", conv.id);
               }
 
+              const mediaType = ["image", "video", "audio", "document", "sticker"].includes(msg.type) ? msg.type : undefined;
+              const mediaId = msg[msg.type]?.id;
+              let mediaUrl: string | undefined;
+              if (mediaId && container.apiKey) {
+                try {
+                  const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
+                  const mediaRes = await fetch(`${endpoint}/${mediaId}`, { headers: { Authorization: `Bearer ${container.apiKey}` } });
+                  const mediaData = await mediaRes.json();
+                  if (mediaData.url) mediaUrl = mediaData.url;
+                } catch (e: any) {
+                  console.log("Webhook: failed to fetch media URL:", e.message);
+                }
+              }
+
               const newMessage = await storage.createMessage({
                 conversationId: conv.id,
                 content: messageContent,
                 isFromContact: true,
                 whatsappMessageId: msg.id,
+                mediaType: mediaType,
+                mediaUrl: mediaUrl,
               });
               console.log("Webhook: stored message:", newMessage.id);
+
+              await db.update(conversations)
+                .set({ unreadCount: sql`COALESCE(${conversations.unreadCount}, 0) + 1` })
+                .where(eq(conversations.id, conv.id));
 
               if (conv.assignedTo) {
                 broadcastToUser(conv.assignedTo, {

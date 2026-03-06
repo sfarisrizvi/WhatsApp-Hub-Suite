@@ -91,7 +91,16 @@ export default function Pipeline() {
   const totalValue = deals.reduce((sum, d) => sum + (d.value || 0), 0);
 
   return (
-    <div className="p-6 space-y-4 overflow-hidden h-full flex flex-col">
+    <div className="p-6 space-y-4 overflow-hidden h-full flex flex-col relative">
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[2px]" data-testid="overlay-coming-soon">
+        <div className="text-center space-y-2">
+          <div className="h-12 w-12 rounded-md bg-primary/10 flex items-center justify-center mx-auto">
+            <CircleDot className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold">Coming Soon</h2>
+          <p className="text-sm text-muted-foreground max-w-xs">Sales Pipeline is under development and will be available shortly.</p>
+        </div>
+      </div>
       <div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-pipeline-title">Sales Pipeline</h1>

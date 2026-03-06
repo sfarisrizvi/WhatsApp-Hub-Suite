@@ -20,6 +20,7 @@ import {
 import {
   MessageSquare, Send, StickyNote, Search, Plus, Phone, Mail,
   Tag, User, Clock, ChevronRight, Paperclip, Smile, X, UserCircle,
+  Check, CheckCheck, Image, FileText, Video, Mic, File,
 } from "lucide-react";
 import type { Conversation, Contact, Message } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +55,77 @@ function groupMessagesByDate(msgs: Message[]): { date: string; messages: Message
   return groups;
 }
 
+function MessageTicks({ msg }: { msg: Message }) {
+  if (msg.isFromContact || msg.isInternalNote) return null;
+  if (msg.whatsappMessageId) {
+    return <CheckCheck className="h-3 w-3 text-blue-500 inline-block ml-1" />;
+  }
+  return <Check className="h-3 w-3 text-muted-foreground inline-block ml-1" />;
+}
+
+function MediaContent({ msg }: { msg: Message }) {
+  const mediaType = (msg as any).mediaType;
+  if (!mediaType) return null;
+
+  if (mediaType === "image") {
+    return (
+      <div className="mb-1 rounded overflow-hidden max-w-[200px]">
+        {msg.mediaUrl ? (
+          <img src={msg.mediaUrl} alt="Image" className="w-full rounded" loading="lazy" />
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-1">
+            <Image className="h-3.5 w-3.5" /> Image
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (mediaType === "video") {
+    return (
+      <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground py-1">
+        <Video className="h-3.5 w-3.5" /> Video
+        {msg.mediaUrl && (
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="underline text-primary text-[11px]">Open</a>
+        )}
+      </div>
+    );
+  }
+  if (mediaType === "audio") {
+    return (
+      <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground py-1">
+        <Mic className="h-3.5 w-3.5" /> Audio message
+        {msg.mediaUrl && (
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="underline text-primary text-[11px]">Play</a>
+        )}
+      </div>
+    );
+  }
+  if (mediaType === "document") {
+    return (
+      <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground py-1 bg-muted/30 rounded px-2">
+        <FileText className="h-3.5 w-3.5" />
+        <span className="truncate flex-1">Document</span>
+        {msg.mediaUrl && (
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="underline text-primary text-[11px] shrink-0">Download</a>
+        )}
+      </div>
+    );
+  }
+  return null;
+}
+
+function lastMessagePreview(msg: Message | null | undefined): string {
+  if (!msg) return "No messages yet";
+  const prefix = msg.isFromContact ? "" : "You: ";
+  const mediaType = (msg as any).mediaType;
+  if (msg.isInternalNote) return `${prefix}[Note] ${msg.content}`;
+  if (mediaType === "image") return `${prefix}[Image]`;
+  if (mediaType === "video") return `${prefix}[Video]`;
+  if (mediaType === "audio") return `${prefix}[Audio]`;
+  if (mediaType === "document") return `${prefix}[Document]`;
+  return `${prefix}${msg.content}`;
+}
+
 export default function Inbox() {
   const { activeContainer } = useContainer();
   const { user } = useAuth();
@@ -62,12 +134,14 @@ export default function Inbox() {
   const cid = activeContainer?.id;
   const [selectedConv, setSelectedConv] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
-  const [isNote, setIsNote] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [showNoteInput, setShowNoteInput] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showNewConv, setShowNewConv] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
   const [showContactPanel, setShowContactPanel] = useState(true);
+  const [newLabel, setNewLabel] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [], isLoading } = useQuery<ConvWithContact[]>({
@@ -100,6 +174,7 @@ export default function Inbox() {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConv, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
       setMessageText("");
+      setNoteText("");
       if (data.whatsappError) {
         toast({ title: "Message saved but WhatsApp delivery failed", description: data.whatsappError, variant: "destructive" });
       }
@@ -145,6 +220,15 @@ export default function Inbox() {
     },
   });
 
+  const markReadMutation = useMutation({
+    mutationFn: async (convId: string) => {
+      await apiRequest("POST", `/api/conversations/${convId}/mark-read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
+    },
+  });
+
   useEffect(() => {
     if (lastMessage?.type === "new_message") {
       queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "conversations"] });
@@ -161,6 +245,24 @@ export default function Inbox() {
     }
     prevMessageCount.current = messages.length;
   }, [messages]);
+
+  useEffect(() => {
+    if (selectedConv) {
+      const conv = conversations.find(c => c.id === selectedConv);
+      if (conv && (conv.unreadCount ?? 0) > 0) {
+        markReadMutation.mutate(selectedConv);
+      }
+    }
+  }, [selectedConv, conversations]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const convParam = params.get("conversation");
+    if (convParam && conversations.length > 0) {
+      const exists = conversations.find(c => c.id === convParam);
+      if (exists) setSelectedConv(convParam);
+    }
+  }, [conversations]);
 
   const filteredConvs = conversations.filter(c => {
     if (statusFilter !== "all" && c.status !== statusFilter) return false;
@@ -181,6 +283,29 @@ export default function Inbox() {
   });
 
   const messageGroups = groupMessagesByDate(messages);
+
+  const handleAddLabel = () => {
+    if (!activeContact || !newLabel.trim()) return;
+    const existing = activeContact.tags || [];
+    if (existing.includes(newLabel.trim())) {
+      setNewLabel("");
+      return;
+    }
+    updateContactMutation.mutate({
+      id: activeContact.id,
+      data: { tags: [...existing, newLabel.trim()] },
+    });
+    setNewLabel("");
+  };
+
+  const handleRemoveLabel = (label: string) => {
+    if (!activeContact) return;
+    const existing = activeContact.tags || [];
+    updateContactMutation.mutate({
+      id: activeContact.id,
+      data: { tags: existing.filter(t => t !== label) },
+    });
+  };
 
   if (!activeContainer) {
     return (
@@ -245,38 +370,45 @@ export default function Inbox() {
             </div>
           ) : (
             <div>
-              {filteredConvs.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => setSelectedConv(conv.id)}
-                  className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-accent/50 ${
-                    selectedConv === conv.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
-                  }`}
-                  data-testid={`conv-item-${conv.id}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <Avatar className="h-10 w-10 shrink-0 mt-0.5">
-                      <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                        {conv.contact?.name?.[0]?.toUpperCase() || "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <p className="text-sm font-semibold truncate">{conv.contact?.name || "Unknown"}</p>
-                        <span className="text-[11px] text-muted-foreground shrink-0">
-                          {formatConvDate(conv.lastMessageAt)}
-                        </span>
+              {filteredConvs.map((conv) => {
+                const unread = (conv.unreadCount ?? 0) > 0;
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => setSelectedConv(conv.id)}
+                    className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-accent/50 ${
+                      selectedConv === conv.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
+                    }`}
+                    data-testid={`conv-item-${conv.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-10 w-10 shrink-0 mt-0.5">
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                          {conv.contact?.name?.[0]?.toUpperCase() || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p className={`text-sm truncate ${unread ? "font-bold" : "font-semibold"}`}>{conv.contact?.name || "Unknown"}</p>
+                          <span className={`text-[11px] shrink-0 ${unread ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                            {formatConvDate(conv.lastMessageAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <p className={`text-xs truncate leading-relaxed flex-1 ${unread ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                            {lastMessagePreview(conv.lastMessage)}
+                          </p>
+                          {unread && (
+                            <Badge className="h-5 min-w-[20px] px-1.5 text-[10px] font-bold rounded-full bg-primary text-primary-foreground shrink-0" data-testid={`badge-unread-${conv.id}`}>
+                              {conv.unreadCount}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate leading-relaxed">
-                        {conv.lastMessage
-                          ? (conv.lastMessage.isFromContact ? "" : "You: ") + conv.lastMessage.content
-                          : "No messages yet"
-                        }
-                      </p>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </ScrollArea>
@@ -368,14 +500,14 @@ export default function Inbox() {
                               className={`flex ${msg.isFromContact ? "justify-start" : "justify-end"}`}
                             >
                               {msg.isFromContact && (
-                                <Avatar className="h-7 w-7 shrink-0 mr-2 mt-1">
-                                  <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                                <Avatar className="h-6 w-6 shrink-0 mr-1.5 mt-1 self-end">
+                                  <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
                                     {activeConv?.contact?.name?.[0]?.toUpperCase() || "?"}
                                   </AvatarFallback>
                                 </Avatar>
                               )}
                               <div
-                                className={`rounded-lg px-3 py-2 max-w-[65%] shadow-sm ${
+                                className={`rounded-lg px-3 py-1.5 max-w-[65%] shadow-sm relative ${
                                   msg.isInternalNote
                                     ? "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800"
                                     : msg.isFromContact
@@ -385,15 +517,19 @@ export default function Inbox() {
                                 data-testid={`message-${msg.id}`}
                               >
                                 {msg.isInternalNote && (
-                                  <div className="flex items-center gap-1 mb-1">
+                                  <div className="flex items-center gap-1 mb-0.5">
                                     <StickyNote className="h-3 w-3 text-yellow-600" />
-                                    <span className="text-[10px] font-medium text-yellow-700 dark:text-yellow-400">Internal Note</span>
+                                    <span className="text-[10px] font-medium text-yellow-700 dark:text-yellow-400">Note</span>
                                   </div>
                                 )}
+                                <MediaContent msg={msg} />
                                 <p className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.content}</p>
-                                <p className="text-[10px] text-muted-foreground text-right mt-0.5">
-                                  {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
-                                </p>
+                                <div className="flex items-center justify-end gap-0.5 mt-0.5">
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                                  </span>
+                                  <MessageTicks msg={msg} />
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -406,44 +542,83 @@ export default function Inbox() {
               </ScrollArea>
             </div>
 
-            <div className="border-t bg-card p-3 shrink-0">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Button
-                  variant={isNote ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setIsNote(!isNote)}
-                  data-testid="button-toggle-note"
-                >
-                  <StickyNote className="h-3 w-3 mr-1" />
-                  {isNote ? "Note" : "Message"}
-                </Button>
-              </div>
-              <div className="flex items-end gap-2">
-                <div className="flex-1 relative">
-                  <Textarea
-                    placeholder={isNote ? "Write an internal note..." : "Type a message..."}
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    className="resize-none min-h-[40px] max-h-28 text-sm pr-10 bg-background"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (messageText.trim()) sendMutation.mutate({ content: messageText, isInternalNote: isNote });
-                      }
-                    }}
-                    data-testid="input-message"
-                  />
+            <div className="border-t bg-card shrink-0">
+              {showNoteInput && (
+                <div className="px-3 pt-2 pb-1 border-b bg-yellow-50/50 dark:bg-yellow-900/10">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <StickyNote className="h-3 w-3 text-yellow-600" />
+                    <span className="text-[11px] font-medium text-yellow-700 dark:text-yellow-400">Internal Note</span>
+                    <div className="flex-1" />
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setShowNoteInput(false)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Textarea
+                      placeholder="Write an internal note..."
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      className="resize-none min-h-[36px] max-h-20 text-sm bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (noteText.trim()) sendMutation.mutate({ content: noteText, isInternalNote: true });
+                        }
+                      }}
+                      data-testid="input-note"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shrink-0 border-yellow-300 text-yellow-700"
+                      disabled={!noteText.trim() || sendMutation.isPending}
+                      onClick={() => sendMutation.mutate({ content: noteText, isInternalNote: true })}
+                      data-testid="button-send-note"
+                    >
+                      <Send className="h-3 w-3 mr-1" /> Note
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  size="icon"
-                  className="h-10 w-10 rounded-full shrink-0"
-                  disabled={!messageText.trim() || sendMutation.isPending}
-                  onClick={() => sendMutation.mutate({ content: messageText, isInternalNote: isNote })}
-                  data-testid="button-send-message"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+              )}
+              <div className="p-3">
+                <div className="flex items-center gap-1 mb-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setShowNoteInput(!showNoteInput)}
+                    data-testid="button-toggle-note"
+                    title="Add note"
+                  >
+                    <StickyNote className="h-3.5 w-3.5 text-yellow-600" />
+                  </Button>
+                </div>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 relative">
+                    <Textarea
+                      placeholder="Type a message..."
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      className="resize-none min-h-[40px] max-h-28 text-sm pr-10 bg-background"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (messageText.trim()) sendMutation.mutate({ content: messageText, isInternalNote: false });
+                        }
+                      }}
+                      data-testid="input-message"
+                    />
+                  </div>
+                  <Button
+                    size="icon"
+                    className="h-10 w-10 rounded-full shrink-0"
+                    disabled={!messageText.trim() || sendMutation.isPending}
+                    onClick={() => sendMutation.mutate({ content: messageText, isInternalNote: false })}
+                    data-testid="button-send-message"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </>
@@ -513,16 +688,48 @@ export default function Inbox() {
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Labels</h4>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   {(activeContact.tags || []).length === 0 ? (
                     <p className="text-xs text-muted-foreground">No labels</p>
                   ) : (
                     (activeContact.tags || []).map((tag, i) => (
-                      <Badge key={i} variant="secondary" className="text-[11px] font-normal">
+                      <Badge key={i} variant="secondary" className="text-[11px] font-normal pr-1 flex items-center gap-0.5">
                         {tag}
+                        <button
+                          onClick={() => handleRemoveLabel(tag)}
+                          className="ml-0.5 hover:text-destructive"
+                          data-testid={`button-remove-label-${i}`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
                       </Badge>
                     ))
                   )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input
+                    placeholder="Add label..."
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                    className="h-7 text-xs flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddLabel();
+                      }
+                    }}
+                    data-testid="input-add-label"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={handleAddLabel}
+                    disabled={!newLabel.trim()}
+                    data-testid="button-add-label"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
 
@@ -545,7 +752,7 @@ export default function Inbox() {
               <div>
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Notes</h4>
                 <p className="text-xs text-muted-foreground italic">
-                  Use internal notes in the chat to keep track of important interactions.
+                  Click the note icon below the chat to add internal notes visible only to your team.
                 </p>
               </div>
             </div>

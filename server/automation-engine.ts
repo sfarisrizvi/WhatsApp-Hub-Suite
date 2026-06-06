@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { workflows, workflowRuns, workflowNodeLogs, contacts, conversations, messages, containers } from "../shared/schema";
+import { storage } from "./storage";
 import { eq, and, gt } from "drizzle-orm";
 import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
@@ -236,10 +237,41 @@ ${formatInstructions}`;
     }
 
     // Operation Node (DB Action)
-    if (actionNode && !isTestRun) {
+    if (actionNode) {
       const extracted = aiOutput.ai_processing.extracted_entities;
       console.log(`[Engine] Executing Action with entities:`, extracted);
-      // Execute the requested DB operation here based on actionNode config
+      
+      if (actionNode.data?.targetTable === "crm_orders" || actionNode.data?.targetTable === "orders") {
+        try {
+          // Check if we have order number or items to book
+          if (extracted.order_number || extracted.items || extracted.total_amount) {
+            const orderNumber = extracted.order_number || `ORD-${Date.now().toString().slice(-6)}`;
+            
+            let orderItems = extracted.items || [];
+            if (typeof orderItems === "string") {
+              orderItems = [{ name: orderItems, quantity: 1 }];
+            } else if (!Array.isArray(orderItems)) {
+              orderItems = [orderItems];
+            }
+
+            const totalAmount = extracted.total_amount 
+              ? Math.round(Number(extracted.total_amount)) 
+              : 0;
+
+            await storage.createOrder({
+              containerId: wf.containerId,
+              contactId: contact.id,
+              orderNumber: orderNumber,
+              items: orderItems,
+              totalAmount: totalAmount,
+              status: "pending"
+            });
+            console.log(`[Engine] Order logged to CRM successfully: ${orderNumber}`);
+          }
+        } catch (err: any) {
+          console.error("[Engine] Failed to write order to database:", err.message);
+        }
+      }
     }
 
     const updatedDbMessages = await db.query.messages.findMany({

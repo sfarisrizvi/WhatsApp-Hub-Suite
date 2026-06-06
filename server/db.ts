@@ -11,5 +11,8 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+import { EventEmitter } from "events";
+
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
+export const dbEvents = new EventEmitter();

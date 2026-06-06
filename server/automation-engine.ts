@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, dbEvents } from "./db";
 import { workflows, workflowRuns, workflowNodeLogs, contacts, conversations, messages, containers } from "../shared/schema";
 import { storage } from "./storage";
 import { eq, and, gt } from "drizzle-orm";
@@ -128,7 +128,18 @@ export async function executeWorkflow(workflowId: string, payload: any, isTestRu
             reply_text: z.string().describe("The conversational response to send back to the user"),
             requires_human_handoff: z.boolean().describe("Whether this needs human attention"),
           }),
-          extracted_entities: z.record(z.any()).describe("Any requested fields mapped from the user input"),
+          extracted_entities: z.object({
+            name: z.string().optional().describe("The customer's name, if provided in conversation"),
+            customer_name: z.string().optional().describe("Alternative field for customer's name"),
+            address: z.string().optional().describe("The delivery address, if provided"),
+            delivery_address: z.string().optional().describe("Alternative field for delivery address"),
+            order_number: z.string().optional().describe("A generated order number or specified order code"),
+            items: z.array(z.object({
+              name: z.string().describe("The item name (e.g. Classic Cheeseburger)"),
+              quantity: z.number().describe("The quantity ordered")
+            })).optional().describe("Array of ordered items"),
+            total_amount: z.number().optional().describe("Total price of the order in standard currency units (e.g. 15.50 or 1250)"),
+          }).describe("Extracted entities or fields from user input"),
         })
       });
 
@@ -167,7 +178,36 @@ ${formatInstructions}`;
 
       try {
         const response = await llm.invoke(messagesList);
-        aiOutput = await parser.parse(response.content as string);
+        const rawContent = response.content as string;
+        try {
+          aiOutput = await parser.parse(rawContent);
+        } catch (parseErr) {
+          console.warn("[Engine] JSON parsing failed, trying manual extraction:", parseErr);
+          
+          // Try to extract JSON from raw content if model wrapped it in markdown or similar
+          const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)\s*```/) || rawContent.match(/{[\s\S]*}/);
+          if (jsonMatch) {
+            try {
+              aiOutput = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+            } catch (jsonErr) {
+              console.warn("[Engine] Manual JSON parse failed:", jsonErr);
+            }
+          }
+          
+          if (!aiOutput || !aiOutput.ai_processing) {
+            const cleanText = rawContent.replace(/```json[\s\S]*?```/g, "").replace(/```[\s\S]*?```/g, "").trim();
+            aiOutput = {
+              ai_processing: {
+                detected_intent: "general",
+                response_generation: { 
+                  reply_text: cleanText || "I'm sorry, I couldn't process that. Can you please rephrase?",
+                  requires_human_handoff: false
+                },
+                extracted_entities: {}
+              }
+            };
+          }
+        }
         console.log("[Engine] AI Output generated:", JSON.stringify(aiOutput, null, 2));
       } catch (err: any) {
         console.error("[Engine] LLM Error:", err.message);
@@ -236,26 +276,69 @@ ${formatInstructions}`;
       }
     }
 
+    // Save contact address in customFields if extracted by AI
+    const extracted = aiOutput?.ai_processing?.extracted_entities;
+    if (extracted && (extracted.delivery_address || extracted.address)) {
+      try {
+        const addressVal = extracted.delivery_address || extracted.address;
+        const updatedCustom = { ...(contact.customFields as object || {}), address: addressVal };
+        await db.update(contacts).set({ customFields: updatedCustom }).where(eq(contacts.id, contact.id));
+        contact.customFields = updatedCustom;
+        console.log(`[Engine] Updated contact address: ${addressVal}`);
+      } catch (addrErr: any) {
+        console.error("[Engine] Failed to update contact address:", addrErr.message);
+      }
+    }
+
+    // Save contact name if extracted by AI and currently generic
+    if (extracted && (extracted.name || extracted.customer_name)) {
+      try {
+        const nameVal = extracted.name || extracted.customer_name;
+        if (
+          contact.name === "Guest" || 
+          contact.name === "sandbox_test_phone" || 
+          !contact.name || 
+          contact.name.startsWith("+") || 
+          contact.name.startsWith("0") || 
+          /^[0-9]+$/.test(contact.name.replace(/[^0-9]/g, ""))
+        ) {
+          await db.update(contacts).set({ name: nameVal }).where(eq(contacts.id, contact.id));
+          contact.name = nameVal;
+          console.log(`[Engine] Updated contact name to: ${nameVal}`);
+        }
+      } catch (nameErr: any) {
+        console.error("[Engine] Failed to update contact name:", nameErr.message);
+      }
+    }
+
     // Operation Node (DB Action)
     if (actionNode) {
-      const extracted = aiOutput.ai_processing.extracted_entities;
-      console.log(`[Engine] Executing Action with entities:`, extracted);
+      const extractedEntities = aiOutput.ai_processing.extracted_entities;
+      console.log(`[Engine] Executing Action with entities:`, extractedEntities);
       
       if (actionNode.data?.targetTable === "crm_orders" || actionNode.data?.targetTable === "orders") {
         try {
           // Check if we have order number or items to book
-          if (extracted.order_number || extracted.items || extracted.total_amount) {
-            const orderNumber = extracted.order_number || `ORD-${Date.now().toString().slice(-6)}`;
+          if (extractedEntities.order_number || extractedEntities.items || extractedEntities.total_amount) {
+            const orderNumber = extractedEntities.order_number || `ORD-${Date.now().toString().slice(-6)}`;
             
-            let orderItems = extracted.items || [];
+            let orderItems = extractedEntities.items || [];
             if (typeof orderItems === "string") {
               orderItems = [{ name: orderItems, quantity: 1 }];
-            } else if (!Array.isArray(orderItems)) {
-              orderItems = [orderItems];
+            } else if (Array.isArray(orderItems)) {
+              orderItems = orderItems.map((item: any) => {
+                if (typeof item === "string") {
+                  return { name: item, quantity: 1 };
+                }
+                return { name: item.name || "Unknown Item", quantity: item.quantity || 1 };
+              });
+            } else {
+              orderItems = [{ name: orderItems.name || String(orderItems), quantity: orderItems.quantity || 1 }];
             }
 
-            const totalAmount = extracted.total_amount 
-              ? Math.round(Number(extracted.total_amount)) 
+            // Stored in cents, so we multiply standard currency by 100
+            const totalAmount = extractedEntities.total_amount 
+              ? Math.round(Number(extractedEntities.total_amount) * 100) 
               : 0;
 
             await storage.createOrder({
@@ -267,6 +350,40 @@ ${formatInstructions}`;
               status: "pending"
             });
             console.log(`[Engine] Order logged to CRM successfully: ${orderNumber}`);
+
+            // Find container owner for notification
+            const container = await db.query.containers.findFirst({
+              where: eq(containers.id, wf.containerId),
+            });
+            if (container) {
+              // Create database notification
+              const notification = await storage.createNotification({
+                userId: container.ownerId,
+                containerId: wf.containerId,
+                title: "New Order Booked",
+                body: `Order ${orderNumber} has been booked by ${contact.name || "Guest"} for a total of PKR ${totalAmount.toLocaleString()}.`,
+                type: "order_booked",
+                isRead: false
+              });
+
+              // Broadcast notification to WebSocket clients
+              dbEvents.emit("broadcast", {
+                userId: container.ownerId,
+                data: {
+                  type: "new_notification",
+                  notification
+                }
+              });
+
+              // Broadcast new order reload to WebSocket clients
+              dbEvents.emit("broadcast", {
+                userId: container.ownerId,
+                data: {
+                  type: "new_order",
+                  containerId: wf.containerId
+                }
+              });
+            }
           }
         } catch (err: any) {
           console.error("[Engine] Failed to write order to database:", err.message);

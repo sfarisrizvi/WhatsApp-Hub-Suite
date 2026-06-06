@@ -1,12 +1,14 @@
 import { Switch, Route } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ContainerProvider } from "@/lib/container-context";
-import { WSProvider } from "@/lib/ws-context";
+import { ContainerProvider, useContainer } from "@/lib/container-context";
+import { WSProvider, useWS } from "@/lib/ws-context";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -81,6 +83,33 @@ function NotificationBell() {
   );
 }
 
+function WSNotificationHandler() {
+  const { lastMessage } = useWS();
+  const { toast } = useToast();
+  const { activeContainer } = useContainer();
+  const cid = activeContainer?.id;
+
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    if (lastMessage.type === "new_notification") {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: lastMessage.notification.title || "Notification",
+        description: lastMessage.notification.body || "",
+      });
+    }
+
+    if (lastMessage.type === "new_order") {
+      if (cid && lastMessage.containerId === cid) {
+        queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "orders"] });
+      }
+    }
+  }, [lastMessage, cid, toast]);
+
+  return null;
+}
+
 function AuthenticatedApp() {
   const style = {
     "--sidebar-width": "16rem",
@@ -90,6 +119,7 @@ function AuthenticatedApp() {
   return (
     <ContainerProvider>
       <WSProvider>
+        <WSNotificationHandler />
         <SidebarProvider style={style as React.CSSProperties}>
           <div className="flex h-screen w-full">
             <AppSidebar />

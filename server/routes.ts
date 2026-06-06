@@ -6,7 +6,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
 import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs } from "@shared/schema";
-import { db } from "./db";
+import { db, dbEvents } from "./db";
 import { eq, and, sql, gt } from "drizzle-orm";
 import { executeWorkflow } from "./automation-engine";
 // Mock requireAuth if not provided
@@ -23,6 +23,10 @@ function broadcastToUser(userId: string, data: any) {
     });
   }
 }
+
+dbEvents.on("broadcast", ({ userId, data }) => {
+  broadcastToUser(userId, data);
+});
 
 export async function registerRoutes(
   httpServer: Server,

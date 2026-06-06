@@ -17,8 +17,11 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ShoppingCart, Package, DollarSign, Truck } from "lucide-react";
+import { Plus, ShoppingCart, Package, DollarSign, Truck, Calendar, User, MapPin, CreditCard, Hash, Activity } from "lucide-react";
 import type { Order, Contact } from "@shared/schema";
 
 const statusOptions = [
@@ -35,6 +38,7 @@ export default function Orders() {
   const cid = activeContainer?.id;
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ orderNumber: "", totalAmount: "", contactId: "", items: "" });
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/containers", cid, "orders"],
@@ -87,15 +91,6 @@ export default function Orders() {
 
   return (
     <div className="p-6 space-y-4 overflow-y-auto h-full relative">
-      <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[2px]" data-testid="overlay-coming-soon">
-        <div className="text-center space-y-2">
-          <div className="h-12 w-12 rounded-md bg-primary/10 flex items-center justify-center mx-auto">
-            <ShoppingCart className="h-6 w-6 text-primary" />
-          </div>
-          <h2 className="text-xl font-bold">Coming Soon</h2>
-          <p className="text-sm text-muted-foreground max-w-xs">Orders management is under development and will be available shortly.</p>
-        </div>
-      </div>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-orders-title">Orders</h1>
@@ -203,10 +198,15 @@ export default function Orders() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {orders.map((order) => {
+               {orders.map((order) => {
                 const contact = contacts.find(c => c.id === order.contactId);
                 return (
-                  <TableRow key={order.id} data-testid={`row-order-${order.id}`}>
+                  <TableRow 
+                    key={order.id} 
+                    data-testid={`row-order-${order.id}`}
+                    onClick={() => setSelectedOrder(order)}
+                    className="cursor-pointer transition-colors hover:bg-muted/50"
+                  >
                     <TableCell className="font-medium text-sm">{order.orderNumber}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{contact?.name || "-"}</TableCell>
                     <TableCell className="text-sm">${((order.totalAmount || 0) / 100).toFixed(2)}</TableCell>
@@ -214,7 +214,7 @@ export default function Orders() {
                     <TableCell className="text-xs text-muted-foreground">
                       {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "-"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Select value={order.status || "pending"} onValueChange={(v) => updateStatusMutation.mutate({ id: order.id, status: v })}>
                         <SelectTrigger className="h-8 w-28" data-testid={`select-order-status-${order.id}`}>
                           <SelectValue />
@@ -233,6 +233,123 @@ export default function Orders() {
           </Table>
         )}
       </Card>
+
+      <Sheet open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          {selectedOrder && (
+            <div className="space-y-6 pt-4">
+              <SheetHeader>
+                <div className="flex items-center gap-2 text-primary">
+                  <Package className="h-5 w-5" />
+                  <span className="text-xs font-bold tracking-wider uppercase bg-primary/10 px-2 py-0.5 rounded">Order Details</span>
+                </div>
+                <SheetTitle className="text-xl font-bold flex items-center justify-between mt-1">
+                  <span>{selectedOrder.orderNumber}</span>
+                  {getStatusBadge(selectedOrder.status || "pending")}
+                </SheetTitle>
+                <SheetDescription className="text-xs">
+                  Created on {selectedOrder.createdAt ? new Date(selectedOrder.createdAt).toLocaleString() : "-"}
+                </SheetDescription>
+              </SheetHeader>
+
+              <hr className="border-border" />
+
+              {/* Customer details */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  Customer Information
+                </h3>
+                {(() => {
+                  const contact = contacts.find(c => c.id === selectedOrder.contactId);
+                  if (!contact) return <p className="text-xs text-muted-foreground">No customer information attached</p>;
+                  return (
+                    <div className="bg-muted/40 rounded-lg p-3 space-y-2.5 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Name</span>
+                        <span className="font-medium">{contact.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Phone</span>
+                        <span className="font-medium">{contact.phone}</span>
+                      </div>
+                      {contact.email && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Email</span>
+                          <span className="font-medium truncate max-w-[180px]">{contact.email}</span>
+                        </div>
+                      )}
+                      {(contact.customFields as any)?.address && (
+                        <div className="pt-1 border-t border-border/50">
+                          <span className="text-xs text-muted-foreground block mb-1">Delivery Address</span>
+                          <span className="font-medium text-xs flex items-start gap-1">
+                            <MapPin className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                            <span>{(contact.customFields as any).address}</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <hr className="border-border" />
+
+              {/* Order Items */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                  Items
+                </h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="h-9 text-xs">Item</TableHead>
+                        <TableHead className="h-9 text-xs text-right w-16">Qty</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
+                        (selectedOrder.items as any[]).map((item, idx) => (
+                          <TableRow key={idx} className="hover:bg-transparent">
+                            <TableCell className="py-2 text-xs font-medium">{item.name || "Unknown item"}</TableCell>
+                            <TableCell className="py-2 text-xs text-right font-medium">{item.quantity || 1}</TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={2} className="py-3 text-center text-xs text-muted-foreground">
+                            No items found
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* Order Total / Summary */}
+              <div className="bg-primary/5 rounded-lg p-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CreditCard className="h-3.5 w-3.5" /> Payment Method
+                  </span>
+                  <span className="font-medium text-xs">Cash on Delivery</span>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-primary/10">
+                  <span className="font-semibold text-foreground">Total Amount</span>
+                  <span className="font-bold text-base text-primary">
+                    ${((selectedOrder.totalAmount || 0) / 100).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

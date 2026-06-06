@@ -1240,6 +1240,37 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/workflows/:id/reset-test", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const wf = await db.query.workflows.findFirst({
+        where: eq(workflows.id, id),
+      });
+      if (!wf) return res.status(404).json({ error: "Workflow not found" });
+
+      const testContact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.containerId, wf.containerId),
+          eq(contacts.phone, "sandbox_test_phone")
+        )
+      });
+      if (testContact) {
+        const conv = await db.query.conversations.findFirst({
+          where: and(
+            eq(conversations.containerId, wf.containerId),
+            eq(conversations.contactId, testContact.id)
+          )
+        });
+        if (conv) {
+          await db.delete(messages).where(eq(messages.conversationId, conv.id));
+        }
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/workflows/:id/test", async (req, res) => {
     try {
       const { id } = req.params;

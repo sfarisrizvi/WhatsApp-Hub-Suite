@@ -26,7 +26,8 @@ import {
   MessageSquare,
   ArrowRight,
   Save,
-  Trash
+  Trash,
+  RotateCcw
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
@@ -192,6 +193,24 @@ export default function Automations() {
     onError: (err: any) => {
       setChatHistory(prev => [...prev, { role: "bot", content: `Error: ${err.message}` }]);
       setIsTesting(false);
+    }
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      if (!workflowId) return;
+      const res = await fetch(`/api/workflows/${workflowId}/reset-test`, {
+        method: "POST"
+      });
+      if (!res.ok) throw new Error("Failed to reset sandbox chat");
+      return res.json();
+    },
+    onSuccess: () => {
+      setChatHistory([]);
+      toast({ title: "Sandbox Chat Reset", description: "Chat history has been cleared." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Reset Failed", description: err.message, variant: "destructive" });
     }
   });
 
@@ -410,7 +429,19 @@ export default function Automations() {
               <MessageSquare className="w-4 h-4" />
               <span className="font-semibold text-sm">Local Sandbox</span>
             </div>
-            <Badge variant="secondary" className="text-[10px] bg-white/20 text-white border-0">TEST_MODE</Badge>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6 text-white hover:bg-white/20" 
+                onClick={() => resetMutation.mutate()} 
+                disabled={resetMutation.isPending || !workflowId}
+                title="Reset Chat"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </Button>
+              <Badge variant="secondary" className="text-[10px] bg-white/20 text-white border-0">TEST_MODE</Badge>
+            </div>
           </div>
           <div className="h-64 overflow-y-auto p-3 flex flex-col gap-3 bg-emerald-50/30">
             {chatHistory.length === 0 && (

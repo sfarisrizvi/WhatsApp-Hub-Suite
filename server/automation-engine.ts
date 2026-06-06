@@ -1,3 +1,5 @@
+// Resilient CRM Automation Engine
+// Aligned with DB columns (started_at, completed_at, error_message, trigger_payload)
 import { db, dbEvents } from "./db";
 import { workflows, workflowRuns, workflowNodeLogs, contacts, conversations, messages, containers } from "../shared/schema";
 import { storage } from "./storage";

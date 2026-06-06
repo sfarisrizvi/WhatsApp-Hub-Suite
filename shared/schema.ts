@@ -1,7 +1,7 @@
 export * from "./models/auth";
 
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
@@ -262,3 +262,70 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type ContainerMember = typeof containerMembers.$inferSelect;
 export type InsertContainerMember = z.infer<typeof insertContainerMemberSchema>;
+
+export const workflows = pgTable("workflows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  containerId: uuid("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  triggerType: varchar("trigger_type", { length: 100 }), // e.g. "whatsapp_message"
+  nodes: jsonb("nodes").default([]).notNull(),
+  edges: jsonb("edges").default([]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowRuns = pgTable("workflow_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workflowId: uuid("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  containerId: uuid("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 50 }).notNull(), // running, completed, failed
+  triggerPayload: jsonb("trigger_payload"),
+  metrics: jsonb("metrics"),
+  error: text("error"),
+  startTime: timestamp("start_time").defaultNow().notNull(),
+  endTime: timestamp("end_time"),
+});
+
+export const workflowNodeLogs = pgTable("workflow_node_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id").notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
+  nodeId: varchar("node_id", { length: 255 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull(), // success, failed
+  inputData: jsonb("input_data"),
+  outputData: jsonb("output_data"),
+  error: text("error"),
+  startTime: timestamp("start_time").defaultNow().notNull(),
+  endTime: timestamp("end_time"),
+});
+
+export const workflowsRelations = relations(workflows, ({ one, many }) => ({
+  container: one(containers, {
+    fields: [workflows.containerId],
+    references: [containers.id],
+  }),
+  runs: many(workflowRuns),
+}));
+
+export const workflowRunsRelations = relations(workflowRuns, ({ one, many }) => ({
+  workflow: one(workflows, {
+    fields: [workflowRuns.workflowId],
+    references: [workflows.id],
+  }),
+  logs: many(workflowNodeLogs),
+}));
+
+export const workflowNodeLogsRelations = relations(workflowNodeLogs, ({ one }) => ({
+  run: one(workflowRuns, {
+    fields: [workflowNodeLogs.runId],
+    references: [workflowRuns.id],
+  }),
+}));
+
+export type Workflow = typeof workflows.$inferSelect;
+export type InsertWorkflow = typeof workflows.$inferInsert;
+export type WorkflowRun = typeof workflowRuns.$inferSelect;
+export type InsertWorkflowRun = typeof workflowRuns.$inferInsert;
+export type WorkflowNodeLog = typeof workflowNodeLogs.$inferSelect;
+export type InsertWorkflowNodeLog = typeof workflowNodeLogs.$inferInsert;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useContainer } from "@/lib/container-context";
@@ -77,6 +78,8 @@ export default function Settings() {
   const { user } = useAuth();
   const { activeContainer, setActiveContainer } = useContainer();
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
+  const [activeTab, setActiveTab] = useState("profile");
   const [showCreateContainer, setShowCreateContainer] = useState(false);
   const [containerForm, setContainerForm] = useState({ name: "", phoneNumber: "", businessName: "" });
   const [apiForm, setApiForm] = useState({
@@ -94,8 +97,14 @@ export default function Settings() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("agent");
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const defaultTab = urlParams.get("tab") || "profile";
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab") || "profile";
+    setActiveTab(tab);
+    if (params.get("create") === "true") {
+      setShowCreateContainer(true);
+    }
+  }, [location]);
 
   const { data: containers = [], isLoading } = useQuery<Container[]>({
     queryKey: ["/api/containers"],
@@ -284,7 +293,10 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground">Manage your account, workspaces, and integrations</p>
       </div>
 
-      <Tabs defaultValue={defaultTab}>
+      <Tabs value={activeTab} onValueChange={(v) => {
+        setActiveTab(v);
+        setLocation(`/settings?tab=${v}`);
+      }}>
         <TabsList>
           <TabsTrigger value="profile" data-testid="tab-profile">
             <User className="h-3.5 w-3.5 mr-1" /> Profile

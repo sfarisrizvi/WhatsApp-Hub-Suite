@@ -99,7 +99,7 @@ export function AppSidebar() {
             ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/settings?tab=containers" className="flex items-center gap-2">
+              <Link href="/settings?tab=containers&create=true" className="flex items-center gap-2">
                 <Plus className="h-3.5 w-3.5" />
                 <span className="text-sm">New Workspace</span>
               </Link>

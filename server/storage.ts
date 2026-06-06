@@ -63,7 +63,7 @@ export interface IStorage {
   getConversations(containerId: string): Promise<(Conversation & { contact: Contact | null })[]>;
   getConversation(id: string): Promise<Conversation | undefined>;
   createConversation(data: InsertConversation): Promise<Conversation>;
-  updateConversation(id: string, data: Partial<InsertConversation>): Promise<Conversation>;
+  updateConversation(id: string, data: Partial<Conversation>): Promise<Conversation>;
 
   // Messages
   getMessages(conversationId: string): Promise<Message[]>;
@@ -272,7 +272,7 @@ export class DatabaseStorage implements IStorage {
     return conv;
   }
 
-  async updateConversation(id: string, data: Partial<InsertConversation>): Promise<Conversation> {
+  async updateConversation(id: string, data: Partial<Conversation>): Promise<Conversation> {
     const [conv] = await db.update(conversations).set(data).where(eq(conversations.id, id)).returning();
     return conv;
   }

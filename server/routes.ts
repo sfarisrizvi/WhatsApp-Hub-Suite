@@ -5,9 +5,12 @@ import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
-import { containers, contacts, conversations, messages, deals, orders } from "@shared/schema";
+import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, gt } from "drizzle-orm";
+import { executeWorkflow } from "./automation-engine";
+// Mock requireAuth if not provided
+const requireAuth = (req: any, res: any, next: any) => next();
 
 const wsClients = new Map<string, Set<WebSocket>>();
 
@@ -851,6 +854,34 @@ export async function registerRoutes(
                 conversationId: conv.id,
                 containerId: container.id,
               });
+
+              // Trigger active workflows for the container
+              try {
+                const activeWorkflow = await db.query.workflows.findFirst({
+                  where: and(
+                    eq(workflows.containerId, container.id),
+                    eq(workflows.isActive, true)
+                  )
+                });
+                if (activeWorkflow) {
+                  console.log(`[Webhook] Triggering active workflow ${activeWorkflow.id} for message from ${senderPhone}`);
+                  const payload = {
+                    message: {
+                      body: messageContent,
+                      from: senderPhone,
+                      from_name: value.contacts?.[0]?.profile?.name || senderPhone
+                    },
+                    session: {
+                      thread_id: conv.id,
+                    }
+                  };
+                  executeWorkflow(activeWorkflow.id, payload, false).catch(err => {
+                    console.error("[Webhook workflow execution error]", err);
+                  });
+                }
+              } catch (wfErr: any) {
+                console.error("Error finding/triggering workflows for webhook:", wfErr.message);
+              }
             }
           } else if (change.field === "message_template_status_update") {
             const value = change.value;
@@ -1098,5 +1129,132 @@ export async function registerRoutes(
     }
   });
 
-  return httpServer;
+  
+  // ==============================================================================
+  // V2 Automation Engine: Workflow Routes
+  // ==============================================================================
+  
+  app.post("/api/containers/:id/workflows", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description, isActive, triggerType, nodes, edges } = req.body;
+      const [workflow] = await db.insert(workflows).values({
+        containerId: id,
+        name: name || "New V2 Workflow",
+        description,
+        isActive: isActive !== undefined ? isActive : true,
+        triggerType: triggerType || "whatsapp_message",
+        nodes: nodes || [],
+        edges: edges || [],
+      }).returning();
+      res.status(201).json(workflow);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/containers/:id/workflows", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const allWorkflows = await db.query.workflows.findMany({
+        where: eq(workflows.containerId, id),
+        orderBy: (workflows, { desc }) => [desc(workflows.createdAt)],
+      });
+      res.json(allWorkflows);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/workflows/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description, isActive, nodes, edges } = req.body;
+      
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (nodes !== undefined) updateData.nodes = nodes;
+      if (edges !== undefined) updateData.edges = edges;
+      updateData.updatedAt = new Date();
+
+      const [workflow] = await db.update(workflows).set(updateData).where(eq(workflows.id, id)).returning();
+      res.json(workflow);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/workflows/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(workflows).where(eq(workflows.id, id));
+      res.status(204).end();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/workflows/:id/test-history", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const wf = await db.query.workflows.findFirst({
+        where: eq(workflows.id, id),
+      });
+      if (!wf) return res.status(404).json({ error: "Workflow not found" });
+
+      const testContact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.containerId, wf.containerId),
+          eq(contacts.phone, "sandbox_test_phone")
+        )
+      });
+      if (!testContact) return res.json({ history: [] });
+
+      const conv = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.containerId, wf.containerId),
+          eq(conversations.contactId, testContact.id)
+        )
+      });
+      if (!conv) return res.json({ history: [] });
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const dbMessages = await db.query.messages.findMany({
+        where: and(
+          eq(messages.conversationId, conv.id),
+          gt(messages.createdAt, oneHourAgo)
+        ),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)]
+      });
+
+      const history = dbMessages.map(msg => ({
+        role: msg.isFromContact ? "user" : "bot",
+        content: msg.content
+      }));
+
+      res.json({ history });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/workflows/:id/test", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const payload = req.body;
+      console.log(`[TEST] Triggering workflow ${id} with payload`, payload);
+      
+      const result = await executeWorkflow(id, payload, true);
+      res.json({ response: result.testOutput, history: result.history });
+    } catch (error: any) {
+      console.error("[TEST ERROR]", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==============================================================================
+
+return httpServer;
 }

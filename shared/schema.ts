@@ -283,9 +283,9 @@ export const workflowRuns = pgTable("workflow_runs", {
   status: varchar("status", { length: 50 }).notNull(), // running, completed, failed
   triggerPayload: jsonb("trigger_payload"),
   metrics: jsonb("metrics"),
-  error: text("error"),
-  startTime: timestamp("start_time").defaultNow().notNull(),
-  endTime: timestamp("end_time"),
+  error: text("error_message"),
+  startTime: timestamp("started_at").defaultNow().notNull(),
+  endTime: timestamp("completed_at"),
 });
 
 export const workflowNodeLogs = pgTable("workflow_node_logs", {
@@ -295,9 +295,9 @@ export const workflowNodeLogs = pgTable("workflow_node_logs", {
   status: varchar("status", { length: 50 }).notNull(), // success, failed
   inputData: jsonb("input_data"),
   outputData: jsonb("output_data"),
-  error: text("error"),
-  startTime: timestamp("start_time").defaultNow().notNull(),
-  endTime: timestamp("end_time"),
+  error: text("error_message"),
+  startTime: timestamp("started_at").defaultNow().notNull(),
+  endTime: timestamp("completed_at"),
 });
 
 export const workflowsRelations = relations(workflows, ({ one, many }) => ({

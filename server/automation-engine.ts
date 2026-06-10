@@ -1,9 +1,9 @@
 // Resilient CRM Automation Engine
 // Aligned with DB columns (started_at, completed_at, error_message, trigger_payload)
 import { db, dbEvents } from "./db";
-import { workflows, workflowRuns, workflowNodeLogs, contacts, conversations, messages, containers } from "../shared/schema";
+import { workflows, workflowRuns, workflowNodeLogs, contacts, conversations, messages, containers, orders } from "../shared/schema";
 import { storage } from "./storage";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, ne } from "drizzle-orm";
 import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
@@ -107,6 +107,28 @@ export async function executeWorkflow(workflowId: string, payload: any, isTestRu
     
     // Stage 2: AI Processor
     let aiOutput: any = null;
+    let activeOrder: any = null;
+
+    // Check if there is an active order for this contact in the last 15 minutes (under preparation, i.e., not delivered or cancelled)
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    try {
+      activeOrder = await db.query.orders.findFirst({
+        where: and(
+          eq(orders.containerId, wf.containerId),
+          eq(orders.contactId, contact.id),
+          ne(orders.status, "delivered"),
+          ne(orders.status, "cancelled"),
+          gt(orders.createdAt, fifteenMinutesAgo)
+        ),
+        orderBy: (orders, { desc }) => [desc(orders.createdAt)]
+      });
+      if (activeOrder) {
+        console.log(`[Engine] Found active order under preparation within 15m: ${activeOrder.orderNumber}`);
+      }
+    } catch (err: any) {
+      console.error("[Engine] Failed to query active orders:", err.message);
+    }
+
     if (aiNode) {
       const modelName = aiNode.data?.llmConfig?.model || "gpt-4o";
       const temperature = aiNode.data?.llmConfig?.temperature || 0.7;
@@ -139,8 +161,8 @@ export async function executeWorkflow(workflowId: string, payload: any, isTestRu
             items: z.array(z.object({
               name: z.string().describe("The item name (e.g. Classic Cheeseburger)"),
               quantity: z.number().describe("The quantity ordered")
-            })).optional().describe("Array of ordered items"),
-            total_amount: z.number().optional().describe("Total price of the order in standard currency units (e.g. 15.50 or 1250)"),
+            })).optional().describe("Array of all items in the order. If the customer adds or removes items from an active order, this array must represent the final updated complete list of items for the order, not just the incremental changes."),
+            total_amount: z.number().optional().describe("Total price of the order in standard currency units (e.g. 15.50 or 1250). If order items are added/removed, this must be updated to the new total amount of all items combined."),
           }).describe("Extracted entities or fields from user input"),
         })
       });
@@ -150,13 +172,21 @@ export async function executeWorkflow(workflowId: string, payload: any, isTestRu
 
       const messagesList: any[] = [];
       
-      // 1. System Prompt + Format Instructions with Name Context
+      // 1. System Prompt + Format Instructions with Name Context & Active Order Context
       const nameContext = contact.name && contact.name !== "sandbox_test_phone" && contact.name !== "Guest"
         ? `The customer's name is ${contact.name}. You should address them by their name when appropriate.`
         : `The customer's name is not specified or verified. Use polite fallback pronouns or address them generally.`;
         
+      let activeOrderContext = "";
+      if (activeOrder) {
+        const orderItemsStr = Array.isArray(activeOrder.items) 
+          ? (activeOrder.items as any[]).map(item => `${item.quantity || 1}x ${item.name || "item"}`).join(", ")
+          : "";
+        activeOrderContext = `\nActive Order Context:\n- The customer currently has an active order (Order Number: ${activeOrder.orderNumber}) created at ${activeOrder.createdAt?.toLocaleString()} which is under preparation.\n- Current items in this active order: ${orderItemsStr || "None"}\n- Current total amount of this active order: PKR ${(activeOrder.totalAmount || 0) / 100}\n- System Guideline: If the customer requests to add, remove, or modify items for this active order, output the full updated list of all items (cumulative final state) in the 'items' field and update the 'total_amount' accordingly. You must NOT generate a new order number. Use the same order number: ${activeOrder.orderNumber}.`;
+      }
+
       const systemContent = `Customer Context:
-- ${nameContext}
+- ${nameContext}${activeOrderContext}
 - Current Time: ${new Date().toLocaleString()}
 
 System Instructions:
@@ -343,48 +373,88 @@ ${formatInstructions}`;
               ? Math.round(Number(extractedEntities.total_amount) * 100) 
               : 0;
 
-            await storage.createOrder({
-              containerId: wf.containerId,
-              contactId: contact.id,
-              orderNumber: orderNumber,
-              items: orderItems,
-              totalAmount: totalAmount,
-              status: "pending"
-            });
-            console.log(`[Engine] Order logged to CRM successfully: ${orderNumber}`);
-
-            // Find container owner for notification
             const container = await db.query.containers.findFirst({
               where: eq(containers.id, wf.containerId),
             });
-            if (container) {
-              // Create database notification
-              const notification = await storage.createNotification({
-                userId: container.ownerId,
+
+            if (activeOrder) {
+              // Update the previous order
+              await storage.updateOrder(activeOrder.id, {
+                items: orderItems,
+                totalAmount: totalAmount || activeOrder.totalAmount,
+              });
+              console.log(`[Engine] Order ${activeOrder.orderNumber} updated in CRM successfully.`);
+
+              if (container) {
+                // Create database notification for update
+                const notification = await storage.createNotification({
+                  userId: container.ownerId,
+                  containerId: wf.containerId,
+                  title: "Order Updated",
+                  body: `Order ${activeOrder.orderNumber} has been updated by ${contact.name || "Guest"} for a total of PKR ${(totalAmount || activeOrder.totalAmount || 0).toLocaleString()}.`,
+                  type: "order_updated",
+                  isRead: false
+                });
+
+                // Broadcast notification to WebSocket clients
+                dbEvents.emit("broadcast", {
+                  userId: container.ownerId,
+                  data: {
+                    type: "new_notification",
+                    notification
+                  }
+                });
+
+                // Broadcast new order reload to WebSocket clients
+                dbEvents.emit("broadcast", {
+                  userId: container.ownerId,
+                  data: {
+                    type: "new_order",
+                    containerId: wf.containerId
+                  }
+                });
+              }
+            } else {
+              // Create a new order
+              await storage.createOrder({
                 containerId: wf.containerId,
-                title: "New Order Booked",
-                body: `Order ${orderNumber} has been booked by ${contact.name || "Guest"} for a total of PKR ${totalAmount.toLocaleString()}.`,
-                type: "order_booked",
-                isRead: false
+                contactId: contact.id,
+                orderNumber: orderNumber,
+                items: orderItems,
+                totalAmount: totalAmount,
+                status: "pending"
               });
+              console.log(`[Engine] Order logged to CRM successfully: ${orderNumber}`);
 
-              // Broadcast notification to WebSocket clients
-              dbEvents.emit("broadcast", {
-                userId: container.ownerId,
-                data: {
-                  type: "new_notification",
-                  notification
-                }
-              });
+              if (container) {
+                // Create database notification
+                const notification = await storage.createNotification({
+                  userId: container.ownerId,
+                  containerId: wf.containerId,
+                  title: "New Order Booked",
+                  body: `Order ${orderNumber} has been booked by ${contact.name || "Guest"} for a total of PKR ${totalAmount.toLocaleString()}.`,
+                  type: "order_booked",
+                  isRead: false
+                });
 
-              // Broadcast new order reload to WebSocket clients
-              dbEvents.emit("broadcast", {
-                userId: container.ownerId,
-                data: {
-                  type: "new_order",
-                  containerId: wf.containerId
-                }
-              });
+                // Broadcast notification to WebSocket clients
+                dbEvents.emit("broadcast", {
+                  userId: container.ownerId,
+                  data: {
+                    type: "new_notification",
+                    notification
+                  }
+                });
+
+                // Broadcast new order reload to WebSocket clients
+                dbEvents.emit("broadcast", {
+                  userId: container.ownerId,
+                  data: {
+                    type: "new_order",
+                    containerId: wf.containerId
+                  }
+                });
+              }
             }
           }
         } catch (err: any) {

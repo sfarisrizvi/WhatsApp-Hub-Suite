@@ -2,9 +2,7 @@ import { db } from "./db";
 import { knowledgeChunks, knowledgeDocuments } from "../shared/schema";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+import { PDFParse } from "pdf-parse";
 import { eq, sql } from "drizzle-orm";
 
 const embeddings = new OpenAIEmbeddings({
@@ -15,7 +13,8 @@ export async function processDocument(documentId: string, fileBuffer: Buffer, mi
   try {
     let text = "";
     if (mimetype === "application/pdf") {
-      const data = await pdfParse(fileBuffer);
+      const parser = new PDFParse({ data: fileBuffer });
+      const data = await parser.getText();
       text = data.text;
     } else {
       text = fileBuffer.toString("utf8");

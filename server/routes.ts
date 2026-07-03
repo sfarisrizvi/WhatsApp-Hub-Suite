@@ -1416,7 +1416,7 @@ export async function registerRoutes(
       console.log(`[TEST] Triggering workflow ${id} with payload`, payload);
       
       const result = await executeWorkflow(id, payload, true);
-      res.json({ response: result.testOutput, history: result.history });
+      res.json({ response: result.testOutput, botReply: result.botReply });
     } catch (error: any) {
       console.error("[TEST ERROR]", error);
       res.status(500).json({ error: error.message });
@@ -1426,44 +1426,12 @@ export async function registerRoutes(
   app.post("/api/containers/:containerId/sandbox/message", isAuthenticated, async (req: any, res) => {
     try {
       const { containerId } = req.params;
-      const { content } = req.body;
-      const userId = req.session.userId!;
-      
+      const { content, history: clientHistory = [] } = req.body;
+
       const container = await db.query.containers.findFirst({
         where: eq(containers.id, containerId)
       });
       if (!container) return res.status(404).json({ error: "No active container found" });
-
-      let contact = await db.query.contacts.findFirst({
-        where: and(
-          eq(contacts.containerId, container.id),
-          eq(contacts.phone, "sandbox_test_phone")
-        )
-      });
-      if (!contact) {
-        [contact] = await db.insert(contacts).values({
-          containerId: container.id,
-          name: "Sandbox Customer",
-          phone: "sandbox_test_phone"
-        }).returning();
-      }
-
-      let conv = await db.query.conversations.findFirst({
-        where: and(
-          eq(conversations.containerId, container.id),
-          eq(conversations.contactId, contact.id)
-        )
-      });
-      if (!conv) {
-        [conv] = await db.insert(conversations).values({
-          containerId: container.id,
-          contactId: contact.id,
-          status: "open"
-        }).returning();
-      }
-
-      // NOTE: The trigger node inserts the user message into the DB during test runs.
-      // We do NOT insert here to avoid duplicate messages.
 
       const activeWorkflow = await db.query.workflows.findFirst({
         where: and(
@@ -1472,78 +1440,27 @@ export async function registerRoutes(
         )
       });
 
-      let testOutput = "";
-      if (activeWorkflow) {
-        try {
-          console.log(`[Sandbox Bubble] Triggering workflow ${activeWorkflow.id}`);
-          const payload = {
-            message: {
-              body: content,
-              from: "sandbox_test_phone",
-              from_name: "Sandbox Customer"
-            },
-            session: {
-              thread_id: conv.id,
-            }
-          };
-          const result = await executeWorkflow(activeWorkflow.id, payload, true);
-          testOutput = result.testOutput;
-        } catch (wfError: any) {
-          console.error("[Sandbox Bubble Workflow Error]", wfError.message);
-          testOutput = `[Workflow Error] ${wfError.message}`;
-          await db.insert(messages).values({
-            conversationId: conv.id,
-            content: `Workflow error: ${wfError.message}`,
-            isFromContact: false,
-          });
-        }
-      } else {
-        // No active workflow — just insert user message manually so it shows in history
-        await db.insert(messages).values({
-          conversationId: conv.id,
-          content: content,
-          isFromContact: true,
-        });
-        testOutput = "(No active workflow found — message saved only)";
+      if (!activeWorkflow) {
+        return res.json({ reply: null, info: "No active workflow found. Activate a workflow in the Automations page first." });
       }
 
-      // Re-fetch conversation after workflow so we get the definitive conversation ID.
-      // The trigger node does its own contact/conversation lookup, so we re-query to ensure alignment.
-      const finalContact = await db.query.contacts.findFirst({
-        where: and(
-          eq(contacts.containerId, container.id),
-          eq(contacts.phone, "sandbox_test_phone")
-        )
-      });
-      const finalConv = finalContact
-        ? await db.query.conversations.findFirst({
-            where: and(
-              eq(conversations.containerId, container.id),
-              eq(conversations.contactId, finalContact.id)
-            )
-          })
-        : null;
+      const payload = {
+        message: {
+          body: content,
+          from: "sandbox_test_phone",
+          from_name: "Sandbox Customer"
+        },
+        session: { thread_id: "sandbox_session" }
+      };
 
-      const queryConvId = finalConv?.id || conv.id;
-      console.log(`[Sandbox] Querying messages for convId=${queryConvId}`);
+      console.log(`[Sandbox] Running workflow ${activeWorkflow.id} with message: "${content}"`);
+      const result = await executeWorkflow(activeWorkflow.id, payload, true);
+      const reply = result.botReply || result.testOutput || null;
+      console.log(`[Sandbox] Bot replied: "${reply}"`);
 
-      const dbMessages = await db.query.messages.findMany({
-        where: eq(messages.conversationId, queryConvId),
-        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
-        limit: 100
-      });
-
-      console.log(`[Sandbox] Found ${dbMessages.length} messages in conv ${queryConvId}`);
-
-      const history = dbMessages.map(msg => ({
-        role: msg.isFromContact ? "user" : "bot",
-        content: msg.content,
-        createdAt: msg.createdAt
-      }));
-
-      res.json({ history, response: testOutput });
+      res.json({ reply });
     } catch (error: any) {
-      console.error("[Sandbox message error]", error);
+      console.error("[Sandbox message error]", error.message);
       res.status(500).json({ error: error.message });
     }
   });

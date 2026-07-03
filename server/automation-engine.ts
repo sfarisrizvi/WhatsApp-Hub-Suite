@@ -247,12 +247,26 @@ export async function executeWorkflow(
       }).where(eq(workflowRuns.id, runId));
     }
 
-    const testOutputText = context.$node["Message"]?.json?.sentText || JSON.stringify(context.$json);
+    // Find the bot's reply text from any node that produced sentText
+    let botReplyText = "";
+    for (const nodeKey of Object.keys(context.$node)) {
+      const nodeJson = context.$node[nodeKey]?.json;
+      if (nodeJson?.sentText) {
+        botReplyText = nodeJson.sentText;
+        break;
+      }
+      // Also check AI node output text
+      if (nodeJson?.text && typeof nodeJson.text === "string") {
+        botReplyText = nodeJson.text;
+        // Keep scanning — prefer sentText from a Message node if one exists
+      }
+    }
+    const testOutputText = botReplyText || JSON.stringify(context.$json);
     return { 
       status: "success", 
       runId, 
       testOutput: testOutputText,
-      history: context.$node["Message"]?.json?.sentText ? [{ role: "bot", content: context.$node["Message"].json.sentText }] : []
+      botReply: botReplyText,
     };
 
   } catch (globalError: any) {

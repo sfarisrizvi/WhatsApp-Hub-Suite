@@ -2,68 +2,60 @@ import { useState, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, X, Send, RotateCcw, Loader2 } from "lucide-react";
+import { MessageSquare, X, Send, RotateCcw, Loader2, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useContainer } from "@/lib/container-context";
 import { useToast } from "@/hooks/use-toast";
 
 interface ChatMessage {
-  role: "user" | "bot";
+  role: "user" | "bot" | "info";
   content: string;
-  createdAt?: string;
 }
 
 export function SandboxBubble() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputVal, setInputVal] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { activeContainer } = useContainer();
   const cid = activeContainer?.id;
   const { toast } = useToast();
 
-  // Scroll to bottom when history updates
+  // Scroll to bottom on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
 
-  // Load history from server when chat opens
-  useEffect(() => {
-    if (!isOpen || !cid) return;
-
-    setIsLoadingHistory(true);
-    fetch(`/api/containers/${cid}/sandbox/history`, { credentials: "include" })
-      .then(r => r.json())
-      .then(data => {
-        setChatHistory(data.history || []);
-      })
-      .catch(err => {
-        console.error("[Sandbox] Failed to load history:", err);
-      })
-      .finally(() => setIsLoadingHistory(false));
-  }, [isOpen, cid]);
-
-  // Send message — state is driven entirely by server response
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
-      if (!cid) throw new Error("No active container selected");
+      if (!cid) throw new Error("No active container selected. Please select a container first.");
       const res = await apiRequest("POST", `/api/containers/${cid}/sandbox/message`, { content });
-      return await res.json();
+      const data = await res.json();
+      return data as { reply?: string | null; info?: string; error?: string };
     },
     onMutate: (content) => {
-      // Immediately show user message so it doesn't vanish
       setInputVal("");
+      // Immediately show the user's message
       setChatHistory(prev => [...prev, { role: "user", content }]);
     },
     onSuccess: (data) => {
-      // Replace with authoritative server history (includes bot reply)
-      if (Array.isArray(data.history)) {
-        setChatHistory(data.history);
+      if (data.error) {
+        setChatHistory(prev => [...prev, { role: "info", content: `⚠️ ${data.error}` }]);
+        return;
+      }
+      if (data.info) {
+        // No active workflow
+        setChatHistory(prev => [...prev, { role: "info", content: `ℹ️ ${data.info}` }]);
+        return;
+      }
+      if (data.reply) {
+        setChatHistory(prev => [...prev, { role: "bot", content: data.reply! }]);
+      } else {
+        setChatHistory(prev => [...prev, { role: "info", content: "ℹ️ Workflow ran but produced no text reply. Check node outputs." }]);
       }
     },
     onError: (err: any) => {
-      // Remove the optimistically added user message on failure
+      // Remove the optimistically added user message on hard failure
       setChatHistory(prev => prev.slice(0, -1));
       toast({
         variant: "destructive",
@@ -73,24 +65,16 @@ export function SandboxBubble() {
     },
   });
 
-  // Reset conversation history
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      if (!cid) throw new Error("No active container selected");
-      await apiRequest("POST", `/api/containers/${cid}/sandbox/reset`);
-    },
-    onSuccess: () => {
-      setChatHistory([]);
-    },
-    onError: (err: any) => {
-      toast({ variant: "destructive", title: "Reset Failed", description: err.message });
-    },
-  });
-
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputVal.trim() || sendMutation.isPending) return;
     sendMutation.mutate(inputVal.trim());
+  };
+
+  const handleClear = () => {
+    if (confirm("Clear this test conversation?")) {
+      setChatHistory([]);
+    }
   };
 
   return (
@@ -103,35 +87,34 @@ export function SandboxBubble() {
         data-testid="sandbox-chat-bubble-trigger"
       >
         {isOpen
-          ? <X className="w-6 h-6 animate-in fade-in zoom-in duration-200" />
-          : <MessageSquare className="w-6 h-6 animate-in fade-in zoom-in duration-200" />
+          ? <X className="w-6 h-6" />
+          : <MessageSquare className="w-6 h-6" />
         }
       </button>
 
       {/* CHAT WINDOW */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 w-[350px] h-[480px] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="fixed bottom-24 right-6 z-50 w-[360px] h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
 
           {/* HEADER */}
-          <div className="bg-emerald-500 text-white px-4 py-3 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-2">
+          <div className="bg-emerald-500 text-white px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
               <div className="relative">
-                <span className="flex h-2 w-2 rounded-full bg-green-400 absolute right-0 bottom-0 ring-1 ring-white"></span>
+                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-green-300 ring-1 ring-white"></span>
                 <MessageSquare className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-sm leading-none">Sandbox Tester</h4>
-                <span className="text-[10px] text-emerald-100">Automation Live</span>
+                <p className="font-semibold text-sm leading-none">Sandbox Tester</p>
+                <p className="text-[10px] text-emerald-100 mt-0.5">Test workflow without hitting WhatsApp API</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => { if (confirm("Reset conversation history?")) resetMutation.mutate(); }}
-                disabled={resetMutation.isPending}
-                className="h-7 w-7 text-white hover:bg-emerald-600/50 rounded-full"
-                title="Reset History"
+                onClick={handleClear}
+                className="h-7 w-7 text-white/80 hover:text-white hover:bg-emerald-600 rounded-full"
+                title="Clear Chat"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
@@ -139,7 +122,7 @@ export function SandboxBubble() {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsOpen(false)}
-                className="h-7 w-7 text-white hover:bg-emerald-600/50 rounded-full"
+                className="h-7 w-7 text-white/80 hover:text-white hover:bg-emerald-600 rounded-full"
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -147,59 +130,68 @@ export function SandboxBubble() {
           </div>
 
           {/* MESSAGE STREAM */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-            {isLoadingHistory ? (
-              <div className="flex flex-col items-center justify-center h-full gap-1.5">
-                <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-                <span className="text-xs text-slate-400">Loading history...</span>
-              </div>
-            ) : chatHistory.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <MessageSquare className="w-8 h-8 text-slate-300 mb-2" />
-                <h5 className="font-medium text-xs text-slate-700">Simulate WhatsApp Customer</h5>
-                <p className="text-[11px] text-slate-400 mt-0.5 leading-normal">
-                  Type a message below to test your active automation workflow without sending real WhatsApp API requests!
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+            {chatHistory.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 px-6">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <MessageSquare className="w-6 h-6 text-emerald-500" />
+                </div>
+                <p className="font-semibold text-xs text-slate-700">Simulate a WhatsApp Customer</p>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Type a message to test how your active automation workflow responds. No real messages are sent.
                 </p>
               </div>
             ) : (
-              chatHistory.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-normal shadow-sm ${
-                    msg.role === "user"
-                      ? "bg-emerald-500 text-white rounded-br-none"
-                      : "bg-white text-slate-800 border border-slate-200/60 rounded-bl-none"
-                  }`}>
-                    {msg.content}
+              chatHistory.map((msg, idx) => {
+                if (msg.role === "info") {
+                  return (
+                    <div key={idx} className="flex justify-center">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-200/60 rounded-full px-3 py-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {msg.content}
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${
+                      msg.role === "user"
+                        ? "bg-emerald-500 text-white rounded-br-sm"
+                        : "bg-white text-slate-800 border border-slate-200 rounded-bl-sm"
+                    }`}>
+                      {msg.content}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
 
             {sendMutation.isPending && (
               <div className="flex justify-start">
-                <div className="bg-white border border-slate-200/60 rounded-2xl rounded-bl-none px-3 py-2 text-xs shadow-sm flex items-center gap-1 text-slate-400">
+                <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-3 py-2 text-xs shadow-sm flex items-center gap-1.5 text-slate-400">
                   <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
-                  <span>Agent is thinking...</span>
+                  Agent is thinking...
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* INPUT FORM */}
+          {/* INPUT */}
           <form onSubmit={handleSend} className="p-3 border-t bg-white flex gap-2 items-center">
             <Input
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
-              placeholder="Type message as customer..."
-              className="flex-1 rounded-full text-xs h-9 focus-visible:ring-emerald-500"
-              disabled={sendMutation.isPending || resetMutation.isPending}
+              placeholder="Message as customer..."
+              className="flex-1 rounded-full text-xs h-9 border-slate-200 focus-visible:ring-emerald-500"
+              disabled={sendMutation.isPending}
             />
             <Button
               type="submit"
               size="icon"
-              className="rounded-full bg-emerald-500 hover:bg-emerald-600 shrink-0 h-9 w-9 text-white"
-              disabled={!inputVal.trim() || sendMutation.isPending || resetMutation.isPending}
+              className="rounded-full bg-emerald-500 hover:bg-emerald-600 h-9 w-9 text-white shrink-0"
+              disabled={!inputVal.trim() || sendMutation.isPending}
             >
               <Send className="w-4 h-4" />
             </Button>

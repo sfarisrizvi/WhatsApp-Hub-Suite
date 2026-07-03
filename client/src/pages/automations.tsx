@@ -7,10 +7,12 @@ import '@xyflow/react/dist/style.css';
 import { 
   Zap, BrainCircuit, MessageCircle, Database, Settings2, X, MessageSquare, ArrowRight, Save, Trash, RotateCcw, 
   Globe, SplitSquareHorizontal, Waypoints, Play,
-  Code, Repeat, Hourglass, Wrench, AlertTriangle, Shield, FileArchive, FileCode2, Upload
+  Code, Repeat, Hourglass, Wrench, AlertTriangle, Shield, FileArchive, FileCode2, Upload, Plus, ArrowLeft
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useContainer } from "@/lib/container-context";
+import { useRoute, useLocation } from "wouter";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -239,6 +241,10 @@ export default function Automations() {
   const [workflowName, setWorkflowName] = useState("V2 Automation Flow");
   const [isActive, setIsActive] = useState<boolean>(true);
 
+  // Wouter routing hooks
+  const [match, params] = useRoute("/automations/:id");
+  const [location, setLocation] = useLocation();
+
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -266,6 +272,25 @@ export default function Automations() {
     enabled: !!containerId
   });
 
+  const createMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await fetch(`/api/containers/${containerId}/workflows`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, nodes: [], edges: [], isActive: true })
+      });
+      if (!res.ok) throw new Error("Failed to create workflow");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setIsCreateDialogOpen(false);
+      setNewWfName("");
+      toast({ title: "Workflow Created", description: `Started fresh workflow "${data.name}"` });
+      queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
+      setLocation(`/automations/${data.id}`);
+    }
+  });
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = { name: workflowName, nodes, edges, isActive };
@@ -279,6 +304,9 @@ export default function Automations() {
       setIsActive(data.isActive ?? true);
       toast({ title: "Saved", description: "Workflow saved successfully." });
       queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
+      if (!match) {
+        setLocation(`/automations/${data.id}`);
+      }
     }
   });
 
@@ -376,17 +404,168 @@ export default function Automations() {
   const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
 
   useEffect(() => {
-    if (workflows && workflows.length > 0) {
-      const wf = workflows[0];
-      if (!workflowId) {
-        setWorkflowId(wf.id);
-        setWorkflowName(wf.name);
-        setNodes(wf.nodes || []);
-        setEdges(wf.edges || []);
-        setIsActive(wf.isActive ?? true);
+    if (match && params?.id) {
+      const targetId = params.id;
+      if (workflows && workflows.length > 0) {
+        const wf = workflows.find((w: any) => w.id === targetId);
+        if (wf) {
+          setWorkflowId(wf.id);
+          setWorkflowName(wf.name);
+          setNodes(wf.nodes || []);
+          setEdges(wf.edges || []);
+          setIsActive(wf.isActive ?? true);
+        } else {
+          setLocation("/automations");
+        }
       }
+    } else if (!match) {
+      setWorkflowId(null);
+      setNodes([]);
+      setEdges([]);
     }
-  }, [workflows]);
+  }, [match, params?.id, workflows, setLocation]);
+
+  if (!match) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-[#fafafa] p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Automations</h1>
+            <p className="text-sm text-muted-foreground">Create and manage your AI workflows and integrations.</p>
+          </div>
+          <Button onClick={() => setIsCreateDialogOpen(true)} size="sm">
+            <Plus className="w-4 h-4 mr-2" /> Create Workflow
+          </Button>
+        </div>
+
+        {/* Workflows Cards Grid */}
+        {!workflows || workflows.length === 0 ? (
+          <Card className="p-12 text-center max-w-xl mx-auto mt-8 border-dashed">
+            <Zap className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+            <h3 className="font-semibold text-lg">No automations created yet</h3>
+            <p className="text-muted-foreground text-sm mt-1 mb-6">
+              Create a custom workflow or import a template to start automating your customer interactions.
+            </p>
+            <Button onClick={() => setIsCreateDialogOpen(true)} size="sm">
+              Create First Workflow
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {workflows.map((wf: any) => {
+              const nodesCount = wf.nodes?.length || 0;
+              const edgesCount = wf.edges?.length || 0;
+              return (
+                <Card 
+                  key={wf.id} 
+                  className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer border group"
+                  onClick={() => setLocation(`/automations/${wf.id}`)}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="h-9 w-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                        <Zap className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${wf.isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                          {wf.isActive ? "Active" : "Inactive"}
+                        </span>
+                        <Switch
+                          checked={wf.isActive}
+                          onCheckedChange={async (val) => {
+                            try {
+                              const res = await fetch(`/api/workflows/${wf.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ isActive: val })
+                              });
+                              if (!res.ok) throw new Error();
+                              toast({
+                                title: val ? "Automation Activated" : "Automation Deactivated",
+                                description: `"${wf.name}" is now ${val ? "active" : "inactive"}.`
+                              });
+                              queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
+                            } catch (err) {
+                              toast({
+                                variant: "destructive",
+                                title: "Error",
+                                description: "Failed to toggle status."
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-base group-hover:text-primary transition-colors">{wf.name}</h3>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                        {wf.description || "No description provided."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <Waypoints className="h-3.5 w-3.5" />
+                      <span>{nodesCount} nodes &bull; {edgesCount} connections</span>
+                    </div>
+                    
+                    {/* Delete action */}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        onClick={async () => {
+                          if (confirm(`Are you sure you want to delete "${wf.name}"?`)) {
+                            try {
+                              const res = await fetch(`/api/workflows/${wf.id}`, { method: "DELETE" });
+                              if (!res.ok) throw new Error();
+                              toast({ title: "Deleted", description: "Workflow deleted successfully." });
+                              queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
+                            } catch (err) {
+                              toast({ variant: "destructive", title: "Error", description: "Failed to delete workflow." });
+                            }
+                          }
+                        }}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Dialog for creating workflow inside card page */}
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Workflow</DialogTitle>
+              <DialogDescription>Enter a name for your automation flow.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Workflow Name</Label>
+                <Input 
+                  placeholder="e.g. Lead Follow-up Automation" 
+                  value={newWfName} 
+                  onChange={(e) => setNewWfName(e.target.value)} 
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => createMutation.mutate(newWfName)} disabled={!newWfName || createMutation.isPending}>
+                {createMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#fafafa]">
@@ -468,20 +647,17 @@ export default function Automations() {
       {/* CANVAS */}
       <div className="flex-1 flex flex-col relative">
         <div className="absolute top-4 left-4 z-10 flex gap-2 items-center bg-white/90 p-2 rounded-lg border shadow-sm">
+          <Button variant="outline" size="sm" onClick={() => setLocation("/automations")}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back
+          </Button>
+
           <Select 
             value={workflowId || ""} 
             onValueChange={(val) => {
               if (val === "new") {
                 setIsCreateDialogOpen(true);
               } else {
-                const selected = (workflows || []).find((w: any) => w.id === val);
-                if (selected) {
-                  setWorkflowId(selected.id);
-                  setWorkflowName(selected.name);
-                  setNodes(selected.nodes || []);
-                  setEdges(selected.edges || []);
-                  setIsActive(selected.isActive ?? true);
-                }
+                setLocation(`/automations/${val}`);
               }
             }}
           >

@@ -137,6 +137,7 @@ function AuthenticatedApp() {
                   <Route path="/templates" component={Templates} />
                   <Route path="/campaigns" component={Campaigns} />
                   <Route path="/automations" component={Automations} />
+                  <Route path="/automations/:id" component={Automations} />
                   <Route path="/pipeline" component={Pipeline} />
                   <Route path="/orders" component={Orders} />
                   <Route path="/analytics" component={Analytics} />

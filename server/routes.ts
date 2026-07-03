@@ -1078,6 +1078,139 @@ export async function registerRoutes(
     res.json({ appId, configId });
   });
 
+  // WhatsApp Flow Decryption Endpoint (Data Exchange URL for Meta)
+  app.post("/api/whatsapp/flow", async (req, res) => {
+    try {
+      const { encrypted_aes_key, encrypted_flow_data, initial_vector } = req.body;
+      if (!encrypted_aes_key || !encrypted_flow_data || !initial_vector) {
+        return res.status(400).send("Bad Request: Missing flow variables");
+      }
+
+      const privateKeyPEM = process.env.FLOW_PRIVATE_KEY?.replace(/\\n/g, "\n");
+      if (!privateKeyPEM) {
+        console.error("[Flow Endpoint] FLOW_PRIVATE_KEY is missing from environment variables.");
+        return res.status(500).send("Server Configuration Error");
+      }
+
+      // 1. Decrypt the AES key
+      const decryptedAesKey = crypto.privateDecrypt(
+        {
+          key: crypto.createPrivateKey(privateKeyPEM),
+          padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+          oaepHash: "sha256",
+        },
+        Buffer.from(encrypted_aes_key, "base64")
+      );
+
+      // 2. Decrypt the Flow data
+      const flowDataBuffer = Buffer.from(encrypted_flow_data, "base64");
+      const initialVectorBuffer = Buffer.from(initial_vector, "base64");
+      const TAG_LENGTH = 16;
+      const encryptedBody = flowDataBuffer.subarray(0, -TAG_LENGTH);
+      const authTag = flowDataBuffer.subarray(-TAG_LENGTH);
+
+      const decipher = crypto.createDecipheriv(
+        "aes-128-gcm",
+        decryptedAesKey,
+        initialVectorBuffer
+      );
+      decipher.setAuthTag(authTag);
+
+      const decryptedJSON = Buffer.concat([
+        decipher.update(encryptedBody),
+        decipher.final()
+      ]).toString("utf-8");
+
+      const decryptedBody = JSON.parse(decryptedJSON);
+      console.log("[Flow Endpoint] Decrypted Body:", decryptedBody);
+
+      const { action, screen, data = {}, flow_token } = decryptedBody;
+      let responsePayload: any = {};
+
+      if (action === "INIT") {
+        responsePayload = {
+          screen: "ADDRESS_SCREEN",
+          data: {}
+        };
+      } else if (action === "data_exchange") {
+        console.log("[Flow Endpoint] Received form data:", data);
+        
+        // Extract fields
+        const address = data.address || data.shipping_address || data.shipping_address_field;
+        const orderNumber = data.order_number || data.order_number_field || flow_token; 
+        
+        if (address && orderNumber) {
+          console.log(`[Flow Endpoint] Updating order ${orderNumber} with address: "${address}"`);
+          const [updatedOrder] = await db.update(orders)
+            .set({ shippingAddress: address })
+            .where(eq(orders.orderNumber, orderNumber))
+            .returning();
+          
+          if (updatedOrder) {
+            console.log(`[Flow Endpoint] Successfully updated order in DB:`, updatedOrder.id);
+          } else {
+            console.warn(`[Flow Endpoint] No order found with orderNumber: ${orderNumber}`);
+          }
+        }
+
+        // Return SUCCESS to close the flow and pass parameters
+        responsePayload = {
+          screen: "SUCCESS",
+          data: {
+            extension_message_response: {
+              params: {
+                flow_token,
+                status: "success",
+                address: address || ""
+              }
+            }
+          }
+        };
+      } else if (action === "BACK") {
+        responsePayload = {
+          screen: "ADDRESS_SCREEN",
+          data: {}
+        };
+      } else if (action === "ping") {
+        responsePayload = {
+          data: {
+            status: "active"
+          }
+        };
+      } else {
+        responsePayload = {
+          screen: "ADDRESS_SCREEN",
+          data: {}
+        };
+      }
+
+      // 3. Encrypt the response using AES-GCM (flip initialization vector bytes)
+      const flippedIV = Buffer.alloc(initialVectorBuffer.length);
+      for (let i = 0; i < initialVectorBuffer.length; i++) {
+        flippedIV[i] = ~initialVectorBuffer[i];
+      }
+
+      const cipher = crypto.createCipheriv(
+        "aes-128-gcm",
+        decryptedAesKey,
+        flippedIV
+      );
+
+      const encryptedResponse = Buffer.concat([
+        cipher.update(JSON.stringify(responsePayload), "utf-8"),
+        cipher.final(),
+        cipher.getAuthTag()
+      ]).toString("base64");
+
+      res.setHeader("Content-Type", "text/plain");
+      res.send(encryptedResponse);
+
+    } catch (error: any) {
+      console.error("[Flow Endpoint Decryption Error]", error);
+      res.status(421).send("Decryption failed");
+    }
+  });
+
   // WhatsApp Embedded Signup - OAuth token exchange and auto-configuration
   app.post("/api/whatsapp/embedded-signup", isAuthenticated, async (req: any, res) => {
     try {

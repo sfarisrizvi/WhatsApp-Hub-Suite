@@ -34,6 +34,10 @@ export default function Knowledge() {
   const { data: documents = [], isLoading: docsLoading } = useQuery<KnowledgeDocument[]>({
     queryKey: ["/api/knowledge-bases", selectedBaseId, "documents"],
     enabled: !!selectedBaseId,
+    refetchInterval: (query) => {
+      const docs = query.state.data as KnowledgeDocument[] | undefined;
+      return docs?.some(doc => doc.status === "processing") ? 2000 : false;
+    }
   });
 
   const createBaseMutation = useMutation({

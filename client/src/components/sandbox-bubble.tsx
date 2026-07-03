@@ -15,11 +15,41 @@ interface ChatMessage {
 export function SandboxBubble() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputVal, setInputVal] = useState("");
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { activeContainer } = useContainer();
   const cid = activeContainer?.id;
+
+  // Initialize chat history from local storage if available for this container
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
+    if (!cid) return [];
+    try {
+      const stored = localStorage.getItem(`sandbox_history_${cid}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Save chat history to local storage whenever it changes
+  useEffect(() => {
+    if (cid) {
+      localStorage.setItem(`sandbox_history_${cid}`, JSON.stringify(chatHistory));
+    }
+  }, [chatHistory, cid]);
+
+  // Load history when container changes
+  useEffect(() => {
+    if (cid) {
+      try {
+        const stored = localStorage.getItem(`sandbox_history_${cid}`);
+        setChatHistory(stored ? JSON.parse(stored) : []);
+      } catch (e) {
+        setChatHistory([]);
+      }
+    }
+  }, [cid]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -40,7 +70,7 @@ export function SandboxBubble() {
     },
     onSuccess: (data) => {
       if (data.error) {
-        setChatHistory(prev => [...prev, { role: "info", content: `⚠️ ${data.error}` }]);
+        setChatHistory(prev => [...prev, { role: "info", content: `⚠️ Error from automation: ${data.error}` }]);
         return;
       }
       if (data.info) {
@@ -51,7 +81,7 @@ export function SandboxBubble() {
       if (data.reply) {
         setChatHistory(prev => [...prev, { role: "bot", content: data.reply! }]);
       } else {
-        setChatHistory(prev => [...prev, { role: "info", content: "ℹ️ Workflow ran but produced no text reply. Check node outputs." }]);
+        setChatHistory(prev => [...prev, { role: "info", content: "ℹ️ Workflow ran but produced no text reply. Check node outputs or if the LLM returned an empty response." }]);
       }
     },
     onError: (err: any) => {
@@ -74,6 +104,7 @@ export function SandboxBubble() {
   const handleClear = () => {
     if (confirm("Clear this test conversation?")) {
       setChatHistory([]);
+      if (cid) localStorage.removeItem(`sandbox_history_${cid}`);
     }
   };
 

@@ -1461,7 +1461,8 @@ export async function registerRoutes(
       res.json({ reply });
     } catch (error: any) {
       console.error("[Sandbox message error]", error.message);
-      res.status(500).json({ error: error.message });
+      // Return a 200 with the error so the frontend can display it gracefully in the chat
+      res.json({ error: error.message });
     }
   });
 

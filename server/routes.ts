@@ -960,6 +960,32 @@ export async function registerRoutes(
                   )
                 });
                 if (activeWorkflow) {
+                  // Send typing indicator to the user
+                  if (container.isConfigured && container.phoneNumberId && container.apiKey) {
+                    try {
+                      const recipientPhone = senderPhone.replace(/[^0-9+]/g, "").replace(/^\+/, "");
+                      const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
+                      const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}/messages`;
+                      
+                      await fetch(url, {
+                        method: "POST",
+                        headers: { "Authorization": `Bearer ${container.apiKey}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          messaging_product: "whatsapp",
+                          recipient_type: "individual",
+                          to: recipientPhone,
+                          type: "typing_indicator",
+                          typing_indicator: {
+                            action: "typing_on"
+                          }
+                        }),
+                      });
+                      console.log(`[Webhook] Sent typing_on indicator to ${recipientPhone}`);
+                    } catch (typingErr: any) {
+                      console.error("[Webhook] Failed to send typing indicator:", typingErr.message);
+                    }
+                  }
+
                   console.log(`[Webhook] Triggering active workflow ${activeWorkflow.id} for message from ${senderPhone}`);
                   const payload = {
                     message: {

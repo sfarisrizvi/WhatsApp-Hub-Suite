@@ -273,12 +273,20 @@ export class MessageNodeExecutor extends BaseNodeExecutor {
               };
             }
 
-            await fetch(url, {
+            const response = await fetch(url, {
               method: "POST",
               headers: { "Authorization": `Bearer ${container.apiKey}`, "Content-Type": "application/json" },
               body: JSON.stringify(requestBody),
             });
-          } catch (err) { console.error("WhatsApp Send Error", err); }
+            if (!response.ok) {
+              const errBody = await response.text();
+              console.error("[WhatsApp Send Error] Meta API returned:", response.status, errBody);
+              throw new Error(`Meta API returned ${response.status}: ${errBody}`);
+            }
+          } catch (err: any) {
+            console.error("WhatsApp Send Error", err);
+            throw err;
+          }
         }
       }
     }

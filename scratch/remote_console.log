@@ -1,0 +1,151 @@
+LATEST_MESSAGES: [
+  {
+    "id": "19b94654-f50e-4350-9f48-f8a776e532a8",
+    "is_from_contact": true,
+    "content": "Heyy there?",
+    "created_at": "2026-07-03T18:18:40.460Z"
+  },
+  {
+    "id": "a19c876a-a20a-4d22-beae-3a079dc640c3",
+    "is_from_contact": true,
+    "content": "Heyy\nI need to order",
+    "created_at": "2026-07-03T17:48:31.431Z"
+  },
+  {
+    "id": "abefd2dc-921c-4766-ae41-9542e0c27d94",
+    "is_from_contact": true,
+    "content": "Yes I need this",
+    "created_at": "2026-07-03T16:34:46.007Z"
+  },
+  {
+    "id": "17cb76ff-cdbf-40bf-887f-c0bdfa1d109f",
+    "is_from_contact": false,
+    "content": "The Truffle Fries are priced at 650 PKR per portion.",
+    "created_at": "2026-07-03T16:34:37.312Z"
+  },
+  {
+    "id": "54324699-b8d2-4763-a55d-87ddc8de45c9",
+    "is_from_contact": true,
+    "content": "Truffle Fries - 650 PKR",
+    "created_at": "2026-07-03T16:34:34.386Z"
+  }
+]
+LATEST_RUNS: [
+  {
+    "id": "72ff2f62-cfa9-4c82-bb2a-d04893a3ffc7",
+    "workflow_id": "e79c7b9b-aa07-4818-a418-5394ad00aebd",
+    "status": "completed",
+    "error_message": null,
+    "started_at": "2026-07-03T18:18:41.727Z"
+  },
+  {
+    "id": "047fdd5f-55e8-4df1-be1d-bae0e3ee5e9d",
+    "workflow_id": "e79c7b9b-aa07-4818-a418-5394ad00aebd",
+    "status": "failed",
+    "error_message": "Database structured execution failed: invalid input syntax for type json",
+    "started_at": "2026-07-03T17:48:32.708Z"
+  },
+  {
+    "id": "911cf63a-1285-4a01-9f1c-e33f6185db8f",
+    "workflow_id": "25618050-e794-4d06-b434-c070dd1cec4e",
+    "status": "failed",
+    "error_message": "Message body is empty",
+    "started_at": "2026-07-03T13:57:37.811Z"
+  },
+  {
+    "id": "360fb460-d573-49c1-84b4-3be106942485",
+    "workflow_id": "25618050-e794-4d06-b434-c070dd1cec4e",
+    "status": "failed",
+    "error_message": "Message body is empty",
+    "started_at": "2026-07-03T13:47:15.139Z"
+  },
+  {
+    "id": "6ddeb5c1-4397-42de-828c-f37f3ac1d8c4",
+    "workflow_id": "25618050-e794-4d06-b434-c070dd1cec4e",
+    "status": "failed",
+    "error_message": "Message body is empty",
+    "started_at": "2026-07-03T12:25:39.005Z"
+  }
+]
+LATEST_NODE_LOGS: [
+  {
+    "id": "f340758f-244c-41aa-8a29-519f301899f8",
+    "run_id": "72ff2f62-cfa9-4c82-bb2a-d04893a3ffc7",
+    "node_id": "send_inquiry_reply",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T18:18:49.587Z"
+  },
+  {
+    "id": "3fb10704-fc48-4d96-8178-8339f43dcc84",
+    "run_id": "72ff2f62-cfa9-4c82-bb2a-d04893a3ffc7",
+    "node_id": "rag_inquiry",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T18:18:47.875Z"
+  },
+  {
+    "id": "2fc8c80a-c5dc-4781-899a-ff78020a897f",
+    "run_id": "72ff2f62-cfa9-4c82-bb2a-d04893a3ffc7",
+    "node_id": "router_switch",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T18:18:47.616Z"
+  },
+  {
+    "id": "8c161d74-ecef-49c2-9a1f-d1712997c6fb",
+    "run_id": "72ff2f62-cfa9-4c82-bb2a-d04893a3ffc7",
+    "node_id": "intent_router",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T18:18:42.993Z"
+  },
+  {
+    "id": "74a24041-4c43-4ea9-ad0d-c891f2955d79",
+    "run_id": "72ff2f62-cfa9-4c82-bb2a-d04893a3ffc7",
+    "node_id": "webhook_trigger",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T18:18:41.901Z"
+  },
+  {
+    "id": "69c2f8de-8a98-4d36-beaa-d11e6edbbd63",
+    "run_id": "047fdd5f-55e8-4df1-be1d-bae0e3ee5e9d",
+    "node_id": "order_number_gen",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T17:48:38.455Z"
+  },
+  {
+    "id": "722a20b2-c106-4729-a161-71e3cc78c8e8",
+    "run_id": "047fdd5f-55e8-4df1-be1d-bae0e3ee5e9d",
+    "node_id": "router_switch",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T17:48:38.199Z"
+  },
+  {
+    "id": "d8d2a1f4-f449-4543-82f8-98e0de794279",
+    "run_id": "047fdd5f-55e8-4df1-be1d-bae0e3ee5e9d",
+    "node_id": "intent_router",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T17:48:34.012Z"
+  },
+  {
+    "id": "e8e4f737-f7a3-4c2f-b00a-2ffa0e1c01a4",
+    "run_id": "047fdd5f-55e8-4df1-be1d-bae0e3ee5e9d",
+    "node_id": "webhook_trigger",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T17:48:32.916Z"
+  },
+  {
+    "id": "60be6a34-17cb-435f-8c96-d8d11600e413",
+    "run_id": "911cf63a-1285-4a01-9f1c-e33f6185db8f",
+    "node_id": "node_ai",
+    "status": "success",
+    "error_message": null,
+    "started_at": "2026-07-03T13:57:38.992Z"
+  }
+]

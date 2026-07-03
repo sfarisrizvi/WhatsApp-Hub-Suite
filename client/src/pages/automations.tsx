@@ -237,6 +237,7 @@ export default function Automations() {
   
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState("V2 Automation Flow");
+  const [isActive, setIsActive] = useState<boolean>(true);
 
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState("");
@@ -267,7 +268,7 @@ export default function Automations() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = { name: workflowName, nodes, edges };
+      const payload = { name: workflowName, nodes, edges, isActive };
       const url = workflowId ? `/api/workflows/${workflowId}` : `/api/containers/${containerId}/workflows`;
       const res = await fetch(url, { method: workflowId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error("Failed to save workflow");
@@ -275,6 +276,7 @@ export default function Automations() {
     },
     onSuccess: (data) => {
       setWorkflowId(data.id);
+      setIsActive(data.isActive ?? true);
       toast({ title: "Saved", description: "Workflow saved successfully." });
       queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
     }
@@ -381,6 +383,7 @@ export default function Automations() {
         setWorkflowName(wf.name);
         setNodes(wf.nodes || []);
         setEdges(wf.edges || []);
+        setIsActive(wf.isActive ?? true);
       }
     }
   }, [workflows]);
@@ -477,6 +480,7 @@ export default function Automations() {
                   setWorkflowName(selected.name);
                   setNodes(selected.nodes || []);
                   setEdges(selected.edges || []);
+                  setIsActive(selected.isActive ?? true);
                 }
               }
             }}
@@ -493,6 +497,41 @@ export default function Automations() {
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="sm">
             <Save className="w-4 h-4 mr-2" /> Save
           </Button>
+
+          {workflowId && (
+            <div className="flex items-center gap-2 border-l pl-3 ml-1 border-gray-200">
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                {isActive ? "Active" : "Inactive"}
+              </span>
+              <Switch
+                id="workflow-active-toggle"
+                checked={isActive}
+                onCheckedChange={async (val) => {
+                  setIsActive(val);
+                  try {
+                    const res = await fetch(`/api/workflows/${workflowId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ isActive: val })
+                    });
+                    if (!res.ok) throw new Error();
+                    toast({
+                      title: val ? "Automation Activated" : "Automation Deactivated",
+                      description: `The automation is now ${val ? "active and listening to WhatsApp messages" : "inactive"}.`
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
+                  } catch (err) {
+                    toast({
+                      variant: "destructive",
+                      title: "Error",
+                      description: "Failed to toggle status."
+                    });
+                    setIsActive(!val); // revert on error
+                  }
+                }}
+              />
+            </div>
+          )}
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogContent>

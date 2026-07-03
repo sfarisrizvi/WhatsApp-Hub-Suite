@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { WebSocketServer, WebSocket } from "ws";
@@ -1086,9 +1088,16 @@ export async function registerRoutes(
         return res.status(400).send("Bad Request: Missing flow variables");
       }
 
-      let privateKeyPEM = process.env.FLOW_PRIVATE_KEY;
+      let privateKeyPEM = "";
+      const localKeyPath = path.join(process.cwd(), "private.pem");
+      if (fs.existsSync(localKeyPath)) {
+        privateKeyPEM = fs.readFileSync(localKeyPath, "utf8");
+      } else {
+        privateKeyPEM = process.env.FLOW_PRIVATE_KEY || "";
+      }
+
       if (!privateKeyPEM) {
-        console.error("[Flow Endpoint] FLOW_PRIVATE_KEY is missing from environment variables.");
+        console.error("[Flow Endpoint] FLOW_PRIVATE_KEY is missing from environment/file.");
         return res.status(500).send("Server Configuration Error");
       }
 

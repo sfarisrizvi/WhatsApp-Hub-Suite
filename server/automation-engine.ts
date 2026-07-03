@@ -199,8 +199,15 @@ export async function executeWorkflow(
         console.log(`[DAG Engine][Test] Node "${nodeLabel}" status=${nodeStatus} output=`, JSON.stringify(nodeData).substring(0, 300));
       }
 
-      // Update $json pointer to point to the output of the most recently executed node
-      context.$json = nodeData;
+      // Update $json pointer to point to the output of the most recently executed node,
+      // but preserve the original trigger properties so they are always accessible anywhere via $json
+      context.$json = {
+        payload: context.$json.payload || payload,
+        message: context.$json.message || payload.message || {},
+        contact: context.$json.contact || (context.$node[nodes.find(n => n.type === "triggerNode")?.id!]?.json as any)?.contact,
+        conversation: context.$json.conversation || (context.$node[nodes.find(n => n.type === "triggerNode")?.id!]?.json as any)?.conversation,
+        ...nodeData
+      };
 
       // 4. Log Execution to DB
       if (!isTestRun) {

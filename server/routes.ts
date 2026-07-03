@@ -837,6 +837,30 @@ export async function registerRoutes(
               } else if (msg.type === "reaction") {
                 console.log("Webhook: reaction received:", msg.reaction);
                 continue;
+              } else if (msg.type === "interactive") {
+                const interactive = msg.interactive;
+                const msgAny = msg as any;
+                if (interactive?.type === "nlu_response" && interactive.nlu_response) {
+                  const nlu = interactive.nlu_response;
+                  msgAny.flow_token = nlu.flow_token;
+                  msgAny.flow_payload = nlu.response_json;
+                  try {
+                    const parsed = JSON.parse(nlu.response_json || "{}");
+                    Object.assign(msgAny, parsed);
+                    const firstVal = Object.values(parsed)[0];
+                    messageContent = `[Flow Submitted] ${typeof firstVal === "string" ? firstVal : JSON.stringify(parsed)}`;
+                  } catch (e) {
+                    messageContent = `[Flow Submitted] Token: ${nlu.flow_token}`;
+                  }
+                } else if (interactive?.type === "button_reply" && interactive.button_reply) {
+                  messageContent = interactive.button_reply.title || "";
+                  msgAny.button_id = interactive.button_reply.id;
+                } else if (interactive?.type === "list_reply" && interactive.list_reply) {
+                  messageContent = interactive.list_reply.title || "";
+                  msgAny.list_id = interactive.list_reply.id;
+                } else {
+                  messageContent = "[Interactive message]";
+                }
               } else {
                 messageContent = `[${msg.type}] message`;
               }
@@ -939,7 +963,8 @@ export async function registerRoutes(
                     message: {
                       body: messageContent,
                       from: senderPhone,
-                      from_name: value.contacts?.[0]?.profile?.name || senderPhone
+                      from_name: value.contacts?.[0]?.profile?.name || senderPhone,
+                      ...(msg as any)
                     },
                     session: {
                       thread_id: conv.id,

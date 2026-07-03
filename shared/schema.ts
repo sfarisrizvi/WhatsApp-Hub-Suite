@@ -150,6 +150,8 @@ export const orders = pgTable("orders", {
   items: jsonb("items").default([]),
   totalAmount: integer("total_amount").default(0),
   status: orderStatusEnum("status").default("pending"),
+  shippingAddress: text("shipping_address"),
+  metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

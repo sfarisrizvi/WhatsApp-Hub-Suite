@@ -9,3 +9,6 @@ env
 .local
 env-copy.txt
 env-template.txt
+.n8n-master
+.gitignore
+.claude

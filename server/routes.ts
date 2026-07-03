@@ -61,6 +61,39 @@ export async function registerRoutes(
     });
   });
 
+  // Public Health Check Endpoint
+  app.get("/api/health", async (req, res) => {
+    const status: any = {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      env: {
+        DATABASE_URL_set: !!process.env.DATABASE_URL,
+        SESSION_SECRET_set: !!process.env.SESSION_SECRET,
+        OPENAI_API_KEY_set: !!process.env.OPENAI_API_KEY,
+        NODE_ENV: process.env.NODE_ENV || "not set",
+        PORT: process.env.PORT || "not set",
+      }
+    };
+
+    try {
+      const startTime = Date.now();
+      const dbResult = await db.execute(sql`SELECT 1`);
+      status.database = {
+        status: "connected",
+        responseTimeMs: Date.now() - startTime,
+        connected: Array.isArray(dbResult.rows) && dbResult.rows.length > 0
+      };
+    } catch (e: any) {
+      status.status = "error";
+      status.database = {
+        status: "error",
+        message: e.message
+      };
+    }
+
+    res.json(status);
+  });
+
   // Containers
   app.get("/api/containers", isAuthenticated, async (req: any, res) => {
     try {

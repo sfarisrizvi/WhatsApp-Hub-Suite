@@ -160,10 +160,82 @@ export class MessageNodeExecutor extends BaseNodeExecutor {
             const recipientPhone = recipient.replace(/[^0-9+]/g, "").replace(/^\+/, "");
             const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
             const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}/messages`;
+            
+            let requestBody: any = {
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to: recipientPhone
+            };
+
+            const messageType = config.messageType || "text";
+
+            if (messageType === "text") {
+              requestBody.type = "text";
+              requestBody.text = { body: messageBody };
+            } 
+            else if (messageType === "buttons") {
+              const buttonsList = config.buttons || [];
+              requestBody.type = "interactive";
+              requestBody.interactive = {
+                type: "button",
+                body: { text: messageBody },
+                action: {
+                  buttons: buttonsList.map((title: string, idx: number) => ({
+                    type: "reply",
+                    reply: { id: `btn_${idx + 1}`, title: title.substring(0, 20) } // WhatsApp CTA titles cap at 20 chars
+                  }))
+                }
+              };
+            } 
+            else if (messageType === "location") {
+              requestBody.type = "interactive";
+              requestBody.interactive = {
+                type: "location_request_message",
+                body: { text: messageBody },
+                action: {
+                  name: "send_location"
+                }
+              };
+            } 
+            else if (messageType === "link") {
+              requestBody.type = "interactive";
+              requestBody.interactive = {
+                type: "cta_url",
+                body: { text: messageBody },
+                action: {
+                  name: "cta_url",
+                  parameters: {
+                    display_text: config.linkText || "Open Link",
+                    url: config.linkUrl || ""
+                  }
+                }
+              };
+            }
+            else if (messageType === "flow") {
+              requestBody.type = "interactive";
+              requestBody.interactive = {
+                type: "flow",
+                body: { text: messageBody },
+                action: {
+                  name: "flow",
+                  parameters: {
+                    flow_message_version: "3",
+                    flow_token: config.flowToken || `flow_tok_${Date.now()}`,
+                    flow_id: config.flowId || "",
+                    flow_cta: config.flowCta || "Open Form",
+                    flow_action: "navigate",
+                    flow_action_payload: {
+                      screen: config.flowScreen || "START"
+                    }
+                  }
+                }
+              };
+            }
+
             await fetch(url, {
               method: "POST",
               headers: { "Authorization": `Bearer ${container.apiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: recipientPhone, type: "text", text: { body: messageBody } }),
+              body: JSON.stringify(requestBody),
             });
           } catch (err) { console.error("WhatsApp Send Error", err); }
         }

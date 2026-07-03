@@ -662,10 +662,88 @@ export default function Automations() {
                       <Label>Recipient (To)</Label>
                       <Input placeholder="{{ $json.phone }}" value={(selectedNode.data as any)?.recipient || ""} onChange={(e) => updateNodeData("recipient", e.target.value)} />
                     </div>
+                    
+                    <div className="space-y-1">
+                      <Label>Message Format</Label>
+                      <Select value={(selectedNode.data as any)?.messageType || "text"} onValueChange={(v) => updateNodeData("messageType", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Standard Text</SelectItem>
+                          <SelectItem value="buttons">Quick Reply Buttons</SelectItem>
+                          <SelectItem value="location">Request Location/Address</SelectItem>
+                          <SelectItem value="link">CTA Link Button</SelectItem>
+                          <SelectItem value="flow">WhatsApp Flow Form</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <div className="space-y-1">
                       <Label>Message Body</Label>
                       <Textarea placeholder="Hello {{ $json.name }}!" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.messageBody || ""} onChange={(e) => updateNodeData("messageBody", e.target.value)} />
                     </div>
+
+                    {/* Quick Reply Buttons */}
+                    {((selectedNode.data as any)?.messageType === "buttons") && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Response Buttons (Max 3)</Label>
+                        {((selectedNode.data as any)?.buttons || []).map((btn: string, idx: number) => (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <Input placeholder={`Button ${idx + 1} Label`} className="h-8 text-xs flex-1" value={btn || ""} onChange={(e) => {
+                              const newBtns = [...((selectedNode.data as any)?.buttons || [])];
+                              newBtns[idx] = e.target.value;
+                              updateNodeData("buttons", newBtns);
+                            }} />
+                            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-red-500 hover:text-red-700 animate-none" onClick={() => {
+                              const newBtns = [...((selectedNode.data as any)?.buttons || [])];
+                              newBtns.splice(idx, 1);
+                              updateNodeData("buttons", newBtns);
+                            }}>
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {((selectedNode.data as any)?.buttons || []).length < 3 && (
+                          <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => {
+                            const newBtns = [...((selectedNode.data as any)?.buttons || []), ""];
+                            updateNodeData("buttons", newBtns);
+                          }}>
+                            + Add Response Button
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* CTA Link Button */}
+                    {((selectedNode.data as any)?.messageType === "link") && (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Button Display Text</Label>
+                          <Input placeholder="Open URL Link" value={(selectedNode.data as any)?.linkText || ""} onChange={(e) => updateNodeData("linkText", e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Button URL Link</Label>
+                          <Input placeholder="https://example.com/checkout" value={(selectedNode.data as any)?.linkUrl || ""} onChange={(e) => updateNodeData("linkUrl", e.target.value)} />
+                        </div>
+                      </>
+                    )}
+
+                    {/* WhatsApp Flow Forms */}
+                    {((selectedNode.data as any)?.messageType === "flow") && (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Flow ID (from Meta Developer Panel)</Label>
+                          <Input placeholder="e.g. 382910482901" value={(selectedNode.data as any)?.flowId || ""} onChange={(e) => updateNodeData("flowId", e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Button CTA Text (Label on Button)</Label>
+                          <Input placeholder="e.g. Open Form" value={(selectedNode.data as any)?.flowCta || ""} onChange={(e) => updateNodeData("flowCta", e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Starting Screen ID</Label>
+                          <Input placeholder="START" value={(selectedNode.data as any)?.flowScreen || "START"} onChange={(e) => updateNodeData("flowScreen", e.target.value)} />
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
 
@@ -781,12 +859,69 @@ export default function Automations() {
                       <Input placeholder="https://api.example.com/data" value={(selectedNode.data as any)?.url || ""} onChange={(e) => updateNodeData("url", e.target.value)} />
                       <p className="text-[10px] text-muted-foreground">Supports {'{{ $json.myVariable }}'}</p>
                     </div>
-                    <div className="space-y-1">
-                      <Label>JSON Body</Label>
-                      <Textarea placeholder='{"key": "{{ $json.value }}"}' className="font-mono text-xs h-24" value={typeof (selectedNode.data as any)?.body === "string" ? (selectedNode.data as any)?.body : JSON.stringify((selectedNode.data as any)?.body || {}, null, 2)} onChange={(e) => {
-                        try { updateNodeData("body", JSON.parse(e.target.value)); } catch(err) { updateNodeData("body", e.target.value); }
-                      }} />
-                    </div>
+                    {["POST", "PUT", "PATCH"].includes((selectedNode.data as any)?.method || "GET") && (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Body Type</Label>
+                          <Select value={(selectedNode.data as any)?.bodyType || "json"} onValueChange={(v) => updateNodeData("bodyType", v)}>
+                            <SelectTrigger><SelectValue/></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="json">Raw JSON (Advanced)</SelectItem>
+                              <SelectItem value="form">Key-Value Form (No-Code)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {((selectedNode.data as any)?.bodyType || "json") === "form" ? (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Form Parameters</Label>
+                            {((selectedNode.data as any)?.formParams || []).map((param: any, idx: number) => (
+                              <div key={idx} className="flex gap-2 items-center">
+                                <Input placeholder="Key" className="h-8 text-xs font-mono w-28 shrink-0" value={param.key || ""} onChange={(e) => {
+                                  const newParams = [...((selectedNode.data as any)?.formParams || [])];
+                                  newParams[idx] = { ...newParams[idx], key: e.target.value };
+                                  updateNodeData("formParams", newParams);
+                                  const newBody: Record<string, any> = {};
+                                  newParams.forEach(p => { if (p.key) newBody[p.key] = p.value; });
+                                  updateNodeData("body", newBody);
+                                }} />
+                                <Input placeholder="Value" className="h-8 text-xs flex-1" value={param.value || ""} onChange={(e) => {
+                                  const newParams = [...((selectedNode.data as any)?.formParams || [])];
+                                  newParams[idx] = { ...newParams[idx], value: e.target.value };
+                                  updateNodeData("formParams", newParams);
+                                  const newBody: Record<string, any> = {};
+                                  newParams.forEach(p => { if (p.key) newBody[p.key] = p.value; });
+                                  updateNodeData("body", newBody);
+                                }} />
+                                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-red-500 hover:text-red-700 animate-none" onClick={() => {
+                                  const newParams = [...((selectedNode.data as any)?.formParams || [])];
+                                  newParams.splice(idx, 1);
+                                  updateNodeData("formParams", newParams);
+                                  const newBody: Record<string, any> = {};
+                                  newParams.forEach(p => { if (p.key) newBody[p.key] = p.value; });
+                                  updateNodeData("body", newBody);
+                                }}>
+                                  <Trash className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => {
+                              const newParams = [...((selectedNode.data as any)?.formParams || []), { key: "", value: "" }];
+                              updateNodeData("formParams", newParams);
+                            }}>
+                              + Add Parameter
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <Label>JSON Body</Label>
+                            <Textarea placeholder='{"key": "{{ $json.value }}"}' className="font-mono text-xs h-24" value={typeof (selectedNode.data as any)?.body === "string" ? (selectedNode.data as any)?.body : JSON.stringify((selectedNode.data as any)?.body || {}, null, 2)} onChange={(e) => {
+                              try { updateNodeData("body", JSON.parse(e.target.value)); } catch(err) { updateNodeData("body", e.target.value); }
+                            }} />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </>
                 )}
 
@@ -794,9 +929,132 @@ export default function Automations() {
                 {selectedNode.type === "databaseNode" && (
                   <>
                     <div className="space-y-1">
-                      <Label>Raw SQL Query</Label>
-                      <Textarea placeholder="SELECT * FROM users WHERE id = $1" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.rawQuery || ""} onChange={(e) => updateNodeData("rawQuery", e.target.value)} />
+                      <Label>Query Type</Label>
+                      <Select value={(selectedNode.data as any)?.queryType || "structured"} onValueChange={(v) => updateNodeData("queryType", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="structured">Structured (No-Code)</SelectItem>
+                          <SelectItem value="raw">Raw SQL (Advanced)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
+
+                    {((selectedNode.data as any)?.queryType || "structured") === "structured" ? (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Operation</Label>
+                          <Select value={(selectedNode.data as any)?.operation || "select"} onValueChange={(v) => updateNodeData("operation", v)}>
+                            <SelectTrigger><SelectValue/></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="select">Select Rows</SelectItem>
+                              <SelectItem value="insert">Insert Row</SelectItem>
+                              <SelectItem value="update">Update Rows</SelectItem>
+                              <SelectItem value="delete">Delete Rows</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label>Table</Label>
+                          <Select value={(selectedNode.data as any)?.tableName || "contacts"} onValueChange={(v) => updateNodeData("tableName", v)}>
+                            <SelectTrigger><SelectValue/></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="contacts">Contacts</SelectItem>
+                              <SelectItem value="orders">Orders</SelectItem>
+                              <SelectItem value="deals">Deals</SelectItem>
+                              <SelectItem value="messages">Messages</SelectItem>
+                              <SelectItem value="templates">Templates</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Column Values List (only for insert / update) */}
+                        {["insert", "update"].includes((selectedNode.data as any)?.operation || "select") && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Column Values</Label>
+                            {((selectedNode.data as any)?.fields || []).map((field: any, idx: number) => (
+                              <div key={idx} className="flex gap-2 items-center">
+                                <Input placeholder="Column" className="h-8 text-xs font-mono w-28 shrink-0" value={field.column || ""} onChange={(e) => {
+                                  const newFields = [...((selectedNode.data as any)?.fields || [])];
+                                  newFields[idx] = { ...newFields[idx], column: e.target.value };
+                                  updateNodeData("fields", newFields);
+                                }} />
+                                <Input placeholder="Value" className="h-8 text-xs flex-1" value={field.value || ""} onChange={(e) => {
+                                  const newFields = [...((selectedNode.data as any)?.fields || [])];
+                                  newFields[idx] = { ...newFields[idx], value: e.target.value };
+                                  updateNodeData("fields", newFields);
+                                }} />
+                                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-red-500 hover:text-red-700 animate-none" onClick={() => {
+                                  const newFields = [...((selectedNode.data as any)?.fields || [])];
+                                  newFields.splice(idx, 1);
+                                  updateNodeData("fields", newFields);
+                                }}>
+                                  <Trash className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => {
+                              const newFields = [...((selectedNode.data as any)?.fields || []), { column: "", value: "" }];
+                              updateNodeData("fields", newFields);
+                            }}>
+                              + Add Column Value
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* WHERE filters (for select / update / delete) */}
+                        {["select", "update", "delete"].includes((selectedNode.data as any)?.operation || "select") && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Filters (WHERE)</Label>
+                            {((selectedNode.data as any)?.whereConditions || []).map((cond: any, idx: number) => (
+                              <div key={idx} className="flex gap-2 items-center bg-black/5 p-2 rounded-lg border border-black/10">
+                                <Input placeholder="Column" className="h-8 text-xs font-mono w-20 shrink-0" value={cond.column || ""} onChange={(e) => {
+                                  const newConds = [...((selectedNode.data as any)?.whereConditions || [])];
+                                  newConds[idx] = { ...newConds[idx], column: e.target.value };
+                                  updateNodeData("whereConditions", newConds);
+                                }} />
+                                <Select value={cond.operator || "="} onValueChange={(v) => {
+                                  const newConds = [...((selectedNode.data as any)?.whereConditions || [])];
+                                  newConds[idx] = { ...newConds[idx], operator: v };
+                                  updateNodeData("whereConditions", newConds);
+                                }}>
+                                  <SelectTrigger className="h-8 text-xs w-14 shrink-0"><SelectValue/></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="=">=</SelectItem>
+                                    <SelectItem value="!=">!=</SelectItem>
+                                    <SelectItem value="<">&lt;</SelectItem>
+                                    <SelectItem value=">">&gt;</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Input placeholder="Value" className="h-8 text-xs flex-1" value={cond.value || ""} onChange={(e) => {
+                                  const newConds = [...((selectedNode.data as any)?.whereConditions || [])];
+                                  newConds[idx] = { ...newConds[idx], value: e.target.value };
+                                  updateNodeData("whereConditions", newConds);
+                                }} />
+                                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-red-500 hover:text-red-700 animate-none" onClick={() => {
+                                  const newConds = [...((selectedNode.data as any)?.whereConditions || [])];
+                                  newConds.splice(idx, 1);
+                                  updateNodeData("whereConditions", newConds);
+                                }}>
+                                  <Trash className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => {
+                              const newConds = [...((selectedNode.data as any)?.whereConditions || []), { column: "", operator: "=", value: "" }];
+                              updateNodeData("whereConditions", newConds);
+                            }}>
+                              + Add Filter
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="space-y-1">
+                        <Label>Raw SQL Query</Label>
+                        <Textarea placeholder="SELECT * FROM users WHERE id = $1" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.rawQuery || ""} onChange={(e) => updateNodeData("rawQuery", e.target.value)} />
+                      </div>
+                    )}
                   </>
                 )}
 

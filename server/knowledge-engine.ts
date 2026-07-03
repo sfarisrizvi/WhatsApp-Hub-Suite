@@ -2,8 +2,9 @@ import { db } from "./db";
 import { knowledgeChunks, knowledgeDocuments } from "../shared/schema";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-// @ts-ignore
-import pdfParse from "pdf-parse";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 import { eq, sql } from "drizzle-orm";
 
 const embeddings = new OpenAIEmbeddings({

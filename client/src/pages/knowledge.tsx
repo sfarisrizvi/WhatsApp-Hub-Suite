@@ -38,7 +38,10 @@ export default function Knowledge() {
 
   const createBaseMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/containers/${activeContainer?.id}/knowledge-bases`, {
+      if (!activeContainer?.id) {
+        throw new Error("No active container or workspace selected.");
+      }
+      const res = await apiRequest("POST", `/api/containers/${activeContainer.id}/knowledge-bases`, {
         name: newBaseName,
         description: newBaseDesc,
       });
@@ -51,6 +54,13 @@ export default function Knowledge() {
       setNewBaseDesc("");
       toast({ title: "Knowledge base created" });
     },
+    onError: (err: any) => {
+      toast({
+        title: "Failed to create knowledge base",
+        description: err.message || "An error occurred",
+        variant: "destructive"
+      });
+    }
   });
 
   const uploadDocMutation = useMutation({
@@ -122,7 +132,10 @@ export default function Knowledge() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => createBaseMutation.mutate()} disabled={!newBaseName || createBaseMutation.isPending}>
+              <Button 
+                onClick={() => createBaseMutation.mutate()} 
+                disabled={!newBaseName || !activeContainer?.id || createBaseMutation.isPending}
+              >
                 {createBaseMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Base
               </Button>

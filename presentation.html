@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Whatlify Enterprise Pitch Deck</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+    @page {
+      size: 11in 6.1875in;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #030712;
+      color: #f3f4f6;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      overflow: hidden;
+    }
+
+    .slide {
+      width: 11in;
+      height: 6.1875in;
+      page-break-after: always;
+      page-break-inside: avoid;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 0.5in 0.7in;
+      background-color: #070a13;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(37, 211, 102, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(139, 92, 246, 0.03) 0px, transparent 70%);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      overflow: hidden;
+    }
+
+    /* Header styling */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 12px;
+      margin-bottom: 15px;
+    }
+
+    .brand {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      background-color: #25d366;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #25d366;
+    }
+
+    .slide-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .slide-category {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #6366f1;
+      background: rgba(99, 102, 241, 0.1);
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    /* Content styling */
+    .slide-body {
+      flex-grow: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+      margin-bottom: 15px;
+    }
+
+    .col-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .col-right {
+      flex: 1.1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    /* Footer styling */
+    .slide-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #4b5563;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding-top: 8px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .footer-left span {
+      display: inline-block;
+    }
+
+    .footer-right {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+
+    /* Visual elements */
+    .hero-gradient {
+      background: linear-gradient(135deg, #25d366 0%, #10b981 50%, #6366f1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(5px);
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* Bullet List styles */
+    .list-items {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .list-icon {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+    }
+
+    .list-text {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .list-text-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .list-text-desc {
+      font-size: 12.5px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* Mockups & Device Containers */
+    .device-mockup {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .device-header {
+      height: 24px;
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .device-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .device-dot.red { background-color: #ef4444; }
+    .device-dot.yellow { background-color: #f59e0b; }
+    .device-dot.green { background-color: #10b981; }
+
+    .device-content {
+      position: relative;
+      background-color: #0b0f19;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .device-image {
+      width: 100%;
+      height: auto;
+      object-fit: cover;
+      display: block;
+      border-radius: 0 0 8px 8px;
+    }
+
+    /* Specific Slide Styles */
+    /* Slide 1 - Title */
+    .slide-title-page {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 1in;
+      background-image: 
+        radial-gradient(circle at 50% 30%, rgba(37, 211, 102, 0.1) 0%, transparent 60%),
+        radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.06) 0%, transparent 40%);
+    }
+
+    .hero-logo-large {
+      font-family: 'Outfit', sans-serif;
+      font-size: 72px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+
+    .hero-logo-large span {
+      background: linear-gradient(135deg, #ffffff 40%, #25d366 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      color: #94a3b8;
+      max-width: 7.5in;
+      line-height: 1.5;
+      margin-bottom: 40px;
+      font-weight: 300;
+    }
+
+    .hero-pills {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+    }
+
+    .hero-pill {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 8px 16px;
+      border-radius: 30px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Grid layout for challenges / solution */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      width: 100%;
+      align-items: stretch;
+    }
+
+    .challenge-card {
+      border-top: 3px solid #ef4444;
+    }
+
+    .solution-card {
+      border-top: 3px solid #25d366;
+      background: rgba(16, 185, 129, 0.03);
+    }
+
+    /* Pricing card styling */
+    .pricing-container {
+      width: 100%;
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.6) 100%);
+      border: 1px solid rgba(37, 211, 102, 0.2);
+      border-radius: 16px;
+      padding: 24px 35px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pricing-container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #25d366, #6366f1);
+    }
+
+    .pricing-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 15px;
+    }
+
+    .pricing-title-box h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .pricing-title-box p {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .pricing-tag-box {
+      text-align: right;
+    }
+
+    .price-large {
+      font-family: 'Outfit', sans-serif;
+      font-size: 34px;
+      font-weight: 800;
+      color: #25d366;
+    }
+
+    .price-sub {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .pricing-details-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+
+    .pricing-details-col h4 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #a5b4fc;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pricing-details-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pricing-list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12.5px;
+      color: #e2e8f0;
+      line-height: 1.4;
+    }
+
+    .pricing-list-item svg {
+      flex-shrink: 0;
+      width: 15px;
+      height: 15px;
+      margin-top: 2px;
+      color: #25d366;
+    }
+
+    /* Timeline styling */
+    .timeline {
+      display: flex;
+      width: 100%;
+      position: relative;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin: auto 0;
+      padding: 0 20px;
+    }
+
+    .timeline-line {
+      position: absolute;
+      top: 25px;
+      left: 8%;
+      right: 8%;
+      height: 2px;
+      background: linear-gradient(90deg, #25d366 30%, #6366f1 70%, rgba(255, 255, 255, 0.1) 100%);
+      z-index: 1;
+    }
+
+    .timeline-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 22%;
+      z-index: 2;
+    }
+
+    .timeline-circle {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #0f172a;
+      border: 3px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      color: #94a3b8;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+    }
+
+    .timeline-step.active .timeline-circle {
+      border-color: #25d366;
+      color: #25d366;
+      background: rgba(37, 211, 102, 0.05);
+      box-shadow: 0 0 20px rgba(37, 211, 102, 0.2);
+    }
+
+    .timeline-step.purple .timeline-circle {
+      border-color: #6366f1;
+      color: #6366f1;
+      background: rgba(99, 102, 241, 0.05);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+    }
+
+    .timeline-step-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .timeline-step-desc {
+      font-size: 11.5px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+
+    /* Security grid */
+    .sec-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      width: 100%;
+    }
+
+    .sec-card {
+      border-top: 3px solid #6366f1;
+    }
+
+    .sec-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      color: #6366f1;
+      background: rgba(99, 102, 241, 0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Slide 1: Title & Vision -->
+  <div class="slide slide-title-page">
+    <div class="hero-logo-large">
+      <div class="brand-dot" style="width: 24px; height: 24px; box-shadow: 0 0 20px #25d366;"></div>
+      <span>Whatlify</span>
+    </div>
+    <div class="hero-subtitle">
+      Enterprise-Grade Shared Inbox, No-Code Cognitive AI Automation, and Live CRM Integrations built on the Official Meta WhatsApp Business API.
+    </div>
+    <div class="hero-pills">
+      <div class="hero-pill">
+        <svg style="width:14px; height:14px; fill:currentColor" viewBox="0 0 24 24"><path d="M12.003 21.003c-2.316 0-4.502-.823-6.222-2.318L3 19.996l1.373-4.571A8.956 8.956 0 0 1 3 10.999c0-4.969 4.04-9.006 9.003-9.006 4.969 0 9.007 4.037 9.007 9.006 0 4.968-4.038 9.004-9.007 9.004zm0-16.512c-4.141 0-7.509 3.37-7.509 7.508 0 1.621.523 3.197 1.503 4.516l-.805 2.678 2.766-.786a7.468 7.468 0 0 0 4.045 1.18c4.14 0 7.507-3.37 7.507-7.508 0-4.138-3.367-7.508-7.507-7.508z"/></svg>
+        <span>WhatsApp Partner Ecosystem</span>
+      </div>
+      <div class="hero-pill">
+        <svg style="width:14px; height:14px; fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+        <span>Secure & Scalable</span>
+      </div>
+      <div class="hero-pill">
+        <svg style="width:14px; height:14px; fill:currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        <span>One-Time Setup ($350) + $70/mo</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 2: The Enterprise Challenge -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">The Cost of Fragmented Communication</span>
+      <span class="slide-category" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.1);">The Friction</span>
+    </div>
+    <div class="slide-body">
+      <div class="grid-3">
+        <div class="card challenge-card">
+          <div class="card-title">
+            <svg style="width:20px; height:20px; color:#ef4444;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            Operational Bottlenecks
+          </div>
+          <div class="card-desc">
+            Single-agent phones create massive operational bottlenecks. Your support team is juggling inquiries from one screen, creating blind spots for team leaders and scaling failures.
+          </div>
+        </div>
+        <div class="card challenge-card">
+          <div class="card-title">
+            <svg style="width:20px; height:20px; color:#ef4444;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Missed Opportunities
+          </div>
+          <div class="card-desc">
+            Inquiries arriving outside of local business hours go unanswered. Customers demand instant answers, and a 12-hour delay means they immediately leave for competitors who respond.
+          </div>
+        </div>
+        <div class="card challenge-card">
+          <div class="card-title">
+            <svg style="width:20px; height:20px; color:#ef4444;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            Disconnected Data Silos
+          </div>
+          <div class="card-desc">
+            WhatsApp conversations happen on isolated devices while order bookings and customer notes exist in separate systems, requiring slow, error-prone manual copy-pasting.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 2</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 3: The Whatlify Solution -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Whatlify Unified Ecosystem</span>
+      <span class="slide-category" style="color: #25d366; border-color: rgba(37, 211, 102, 0.2); background: rgba(37, 211, 102, 0.1);">The Solution</span>
+    </div>
+    <div class="slide-body">
+      <div class="grid-3">
+        <div class="card solution-card">
+          <div class="card-title">
+            <svg style="width:20px; height:20px; color:#25d366;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            Shared Team Workspace
+          </div>
+          <div class="card-desc">
+            Connect your entire staff to a single official WhatsApp business line. Easily assign chats to agents, set availability status, and collaborate internally using private notes.
+          </div>
+        </div>
+        <div class="card solution-card">
+          <div class="card-title">
+            <svg style="width:20px; height:20px; color:#25d366;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            Cognitive AI Engine
+          </div>
+          <div class="card-desc">
+            Scale answering capabilities using secure OpenAI/Gemini agents trained on your documentation. Build structured interactive journeys using our no-code drag-and-drop canvas.
+          </div>
+        </div>
+        <div class="card solution-card">
+          <div class="card-title">
+            <svg style="width:20px; height:20px; color:#25d366;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+            Real-Time Database Sync
+          </div>
+          <div class="card-desc">
+            Streamline operational data. Automatically extract buyer names, shipping details, and items from chat, then sync directly to orders, pipelines, and external platforms (Shopify, Sheets).
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 3</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 4: Multi-Agent Shared Inbox -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Collaborative Shared Inbox</span>
+      <span class="slide-category">Team Operations</span>
+    </div>
+    <div class="slide-body">
+      <div class="col-left">
+        <div class="list-items">
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Unified Brand Access</span>
+              <span class="list-text-desc">Run multiple agents, support teams, and departments off a single verified WhatsApp line simultaneously.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Private Collaborative Threads</span>
+              <span class="list-text-desc">Leave internal yellow-coded notes directly inside customer chat boxes to sync with coworkers before drafting replies.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Dynamic Lead Labeling</span>
+              <span class="list-text-desc">Tag contacts with customizable status labels to keep VIPs, sales deals, and support tickets neatly sorted.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="device-mockup">
+          <div class="device-header">
+            <div class="device-dot red"></div>
+            <div class="device-dot yellow"></div>
+            <div class="device-dot green"></div>
+          </div>
+          <div class="device-content" style="height: 240px;">
+            <img class="device-image" src="file:///Users/quecko/Documents/Web%20Projects/WhatsApp-Hub-Suite/attached_assets/Customer%20support.png" alt="Collaborative Inbox Dashboard">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 4</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 5: Cognitive AI Workflow Builder -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">No-Code Visual Automation Engine</span>
+      <span class="slide-category">AI Architecture</span>
+    </div>
+    <div class="slide-body">
+      <div class="col-left">
+        <div class="list-items">
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Drag-and-Drop Node Canvas</span>
+              <span class="list-text-desc">Easily build decision logic. Wire incoming WhatsApp triggers directly to AI logic boxes and backend updates.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Contextual Knowledge Training</span>
+              <span class="list-text-desc">Instruct your AI agent using raw text, brochures, guidelines, or databases to deliver human-like responses.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Embedded Testing Sandbox</span>
+              <span class="list-text-desc">Interact with and fine-tune your workflows inside our real-time testing console before going live.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="device-mockup">
+          <div class="device-header">
+            <div class="device-dot red"></div>
+            <div class="device-dot yellow"></div>
+            <div class="device-dot green"></div>
+          </div>
+          <div class="device-content" style="height: 240px;">
+            <img class="device-image" src="file:///Users/quecko/Documents/Web%20Projects/WhatsApp-Hub-Suite/attached_assets/diagram%20flow.jpeg" alt="No-Code Flow Builder">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 5</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 6: CRM Pipeline & E-Commerce Booking -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Automated Order Logging & Sales CRM</span>
+      <span class="slide-category">Data & Integrations</span>
+    </div>
+    <div class="slide-body">
+      <div class="col-left">
+        <div class="list-items">
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">AI Entity Extraction</span>
+              <span class="list-text-desc">Cognitive bots extract buyer details (quantities, names, physical addresses) straight out of conversation logs.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Automated Sales Pipelines</span>
+              <span class="list-text-desc">Track and nurture chat leads through structured Kanban stages to optimize conversions.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Real-Time Sync & Webhooks</span>
+              <span class="list-text-desc">Issue live alerts to dashboard admins and dispatch transactions instantly to local databases.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="device-mockup">
+          <div class="device-header">
+            <div class="device-dot red"></div>
+            <div class="device-dot yellow"></div>
+            <div class="device-dot green"></div>
+          </div>
+          <div class="device-content" style="height: 240px;">
+            <img class="device-image" src="file:///Users/quecko/Documents/Web%20Projects/WhatsApp-Hub-Suite/attached_assets/post%20purchased.png" alt="CRM and Orders View">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 6</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 7: Rich Media Campaigns & Analytics -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Meta-Approved Marketing & Analytics</span>
+      <span class="slide-category">Marketing ROI</span>
+    </div>
+    <div class="slide-body">
+      <div class="col-left">
+        <div class="list-items">
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Interactive Broadcast Templates</span>
+              <span class="list-text-desc">Design rich media layouts with click-to-action links and quick-replies that comply with Meta standards.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Targeted Customer Segments</span>
+              <span class="list-text-desc">Filter lists by customer tags (e.g. VIP, abandoned cart) to deliver highly personalized promotions.</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <svg class="list-icon" fill="none" stroke="#25d366" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="list-text">
+              <span class="list-text-title">Campaign Delivery Insights</span>
+              <span class="list-text-desc">Track real-time statistics including messages sent, successfully delivered, read, and replied.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="device-mockup">
+          <div class="device-header">
+            <div class="device-dot red"></div>
+            <div class="device-dot yellow"></div>
+            <div class="device-dot green"></div>
+          </div>
+          <div class="device-content" style="height: 240px;">
+            <img class="device-image" src="file:///Users/quecko/Documents/Web%20Projects/WhatsApp-Hub-Suite/attached_assets/broadcast%20campaign.png" alt="Marketing Campaigns">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 7</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 8: Enterprise Security & Multi-Tenancy -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Secure, Multi-Tenant Architecture</span>
+      <span class="slide-category" style="color: #6366f1; border-color: rgba(99, 102, 241, 0.2); background: rgba(99, 102, 241, 0.1);">Enterprise Grade</span>
+    </div>
+    <div class="slide-body" style="align-items: center;">
+      <div class="sec-grid">
+        <div class="card sec-card">
+          <span class="sec-badge">Security</span>
+          <div class="card-title">
+            Workspace Isolation
+          </div>
+          <div class="card-desc">
+            Each branch, department, or company operates in a containerized tenant environment. User data, configurations, and conversation databases are strictly isolated.
+          </div>
+        </div>
+        <div class="card sec-card">
+          <span class="sec-badge">Meta API</span>
+          <div class="card-title">
+            Official Cloud Endpoints
+          </div>
+          <div class="card-desc">
+            Fully compliant communication layer direct to official Meta APIs. No unofficial browser scripts, ensuring your WhatsApp numbers avoid risk of compliance bans.
+          </div>
+        </div>
+        <div class="card sec-card">
+          <span class="sec-badge">Controls</span>
+          <div class="card-title">
+            Token & Temperature Control
+          </div>
+          <div class="card-desc">
+            Encrypt and secure credentials (like OpenAI keys). Calibrate bot temperatures and responses directly to restrict hallucinations and guide operational styling.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 8</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 9: Seamless Onboarding & Value -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Streamlining Your Digital Transformation</span>
+      <span class="slide-category">Implementation Timeline</span>
+    </div>
+    <div class="slide-body">
+      <div class="timeline">
+        <div class="timeline-line"></div>
+        
+        <div class="timeline-step active">
+          <div class="timeline-circle">1</div>
+          <span class="timeline-step-title">Meta Verification</span>
+          <span class="timeline-step-desc">We manage the Meta Business verification process and configure your developer portals.</span>
+        </div>
+        
+        <div class="timeline-step active">
+          <div class="timeline-circle">2</div>
+          <span class="timeline-step-title">Workspace Sync</span>
+          <span class="timeline-step-desc">Establish secure tenants, create agent credentials, and configure visual canvas triggers.</span>
+        </div>
+        
+        <div class="timeline-step purple">
+          <div class="timeline-circle">3</div>
+          <span class="timeline-step-title">AI Training</span>
+          <span class="timeline-step-desc">Upload catalog guidelines, FAQs, and train AI models to mimic brand guidelines.</span>
+        </div>
+        
+        <div class="timeline-step">
+          <div class="timeline-circle">4</div>
+          <span class="timeline-step-title">Go-Live Support</span>
+          <span class="timeline-step-desc">Deploy workflows, monitor live orders, and optimize routing dynamically.</span>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 9</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+  <!-- Slide 10: Clear, Flat-Rate Pricing -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="slide-title">Transparent Pricing, Built for ROI</span>
+      <span class="slide-category" style="color: #25d366; border-color: rgba(37, 211, 102, 0.2); background: rgba(37, 211, 102, 0.1);">Pricing Model</span>
+    </div>
+    <div class="slide-body" style="align-items: center; justify-content: center;">
+      <div class="pricing-container">
+        <div class="pricing-header-row">
+          <div class="pricing-title-box">
+            <h3>Unified Whatlify Package</h3>
+            <p>Complete setup, business verification, visual workflow engineering, and ongoing cloud hosting.</p>
+          </div>
+          <div class="pricing-tag-box">
+            <span class="price-large">$350 <span style="font-size:16px; color:#94a3b8; font-weight:normal;">Setup</span> + $70<span style="font-size:16px; color:#94a3b8; font-weight:normal;">/mo</span></span>
+            <div class="price-sub">Covers server maintenance & standard messaging volume</div>
+          </div>
+        </div>
+        
+        <div class="pricing-details-grid">
+          <div class="pricing-details-col">
+            <h4>
+              <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+              One-Time Onboarding Setup ($350)
+            </h4>
+            <div class="pricing-details-list">
+              <div class="pricing-list-item">
+                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                <span>Full support for official Meta WhatsApp Business API integration.</span>
+              </div>
+              <div class="pricing-list-item">
+                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                <span>Verification handling & developer account setup (Meta Business Manager).</span>
+              </div>
+              <div class="pricing-list-item">
+                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                <span>Bot behavior mapping, knowledge document ingestion, and canvas setup.</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="pricing-details-col">
+            <h4>
+              <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+              Ongoing Maintenance Subscription ($70/mo)
+            </h4>
+            <div class="pricing-details-list">
+              <div class="pricing-list-item">
+                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                <span>Standard message traffic costs and LLM processing limits covered.</span>
+              </div>
+              <div class="pricing-list-item">
+                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                <span>Unlimited human agent logins to the collaborative team inbox.</span>
+              </div>
+              <div class="pricing-list-item">
+                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                <span>Continuous CRM database synchronization and dashboard tracking.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-left">
+        <span>Whatlify Enterprise Pitch Deck</span>
+        <span>•</span>
+        <span>Slide 10</span>
+      </div>
+      <div class="footer-right">Whatlify</div>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -11,3 +11,4 @@ env-template.txt
 .n8n-master
 .gitignore
 .claude
+*.pem

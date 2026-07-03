@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
 import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs, knowledgeBases, knowledgeDocuments } from "@shared/schema";
 import { db, dbEvents } from "./db";
-import { eq, and, sql, gt } from "drizzle-orm";
+import { eq, and, sql, gt, inArray } from "drizzle-orm";
 import { executeWorkflow } from "./automation-engine";
 import multer from "multer";
 import { processDocument } from "./knowledge-engine";
@@ -637,6 +637,35 @@ export async function registerRoutes(
     try {
       const order = await storage.updateOrder(req.params.id, req.body);
       res.json(order);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/orders/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await db.delete(orders).where(eq(orders.id, req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/orders/bulk-delete", isAuthenticated, async (req: any, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Invalid or empty ids array" });
+      }
+      await db.delete(orders).where(inArray(orders.id, ids));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/orders/bulk-update-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const { ids, status } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Invalid or empty ids array" });
+      }
+      await db.update(orders).set({ status }).where(inArray(orders.id, ids));
+      res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

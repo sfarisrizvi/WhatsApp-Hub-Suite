@@ -21,7 +21,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ShoppingCart, Package, DollarSign, Truck, Calendar, User, MapPin, CreditCard, Hash, Activity, Trash2 } from "lucide-react";
+import { Plus, ShoppingCart, Package, DollarSign, Truck, Calendar, User, MapPin, CreditCard, Hash, Activity, Trash2, Search } from "lucide-react";
 import type { Order, Contact } from "@shared/schema";
 
 const statusOptions = [
@@ -44,6 +44,8 @@ export default function Orders() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [showSearch, setShowSearch] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Bulk Action Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -128,8 +130,9 @@ export default function Orders() {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Select a workspace</p></div>;
   }
 
-  // Calculate Date Bounds
+  // Calculate Date Bounds & Search
   const filteredOrders = orders.filter(order => {
+    // 1. Date Filter
     if (order.createdAt) {
       const orderDate = new Date(order.createdAt);
       if (startDate) {
@@ -143,12 +146,28 @@ export default function Orders() {
         if (orderDate > end) return false;
       }
     }
+
+    // 2. Status Filter
     if (statusFilter) {
       if (statusFilter === "pending") {
-        return order.status === "pending" || order.status === "confirmed";
+        if (order.status !== "pending" && order.status !== "confirmed") return false;
+      } else if (order.status !== statusFilter) {
+        return false;
       }
-      return order.status === statusFilter;
     }
+
+    // 3. Search Filter (Order Number / ID, customer name, customer phone number)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const contact = contacts.find(c => c.id === order.contactId);
+      
+      const matchOrderNum = order.orderNumber?.toLowerCase().includes(q) || order.id?.toLowerCase().includes(q);
+      const matchName = contact?.name?.toLowerCase().includes(q);
+      const matchPhone = contact?.phone?.toLowerCase().includes(q);
+
+      if (!matchOrderNum && !matchName && !matchPhone) return false;
+    }
+
     return true;
   });
 
@@ -238,7 +257,7 @@ export default function Orders() {
         </Dialog>
       </div>
 
-      {/* Date Range Filters Bar */}
+      {/* Date Range & Search Filters Bar */}
       <div className="flex items-center gap-4 bg-muted/30 p-3 rounded-lg border flex-wrap">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -264,7 +283,36 @@ export default function Orders() {
             }} 
             className="h-8 w-36 text-xs bg-white" 
           />
-          {(startDate || endDate || statusFilter) && (
+          
+          {/* Search Toggle Button */}
+          <Button
+            variant={showSearch || searchQuery ? "secondary" : "outline"}
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => {
+              setShowSearch(!showSearch);
+              if (showSearch) setSearchQuery(""); // clear search query on close
+            }}
+            title="Search Orders"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+
+          {/* Inline Search Input */}
+          {(showSearch || searchQuery) && (
+            <Input
+              type="text"
+              placeholder="Search ID, name, phone..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSelectedIds([]);
+              }}
+              className="h-8 w-48 md:w-60 text-xs bg-white animate-in slide-in-from-left-2 duration-150"
+            />
+          )}
+
+          {(startDate || endDate || statusFilter || searchQuery) && (
             <Button 
               variant="outline" 
               size="sm" 
@@ -272,6 +320,8 @@ export default function Orders() {
                 setStartDate("");
                 setEndDate("");
                 setStatusFilter(null);
+                setSearchQuery("");
+                setShowSearch(false);
                 setSelectedIds([]);
               }}
               className="h-8 text-xs font-medium text-destructive hover:text-destructive hover:bg-destructive/10"

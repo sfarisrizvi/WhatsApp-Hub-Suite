@@ -560,7 +560,7 @@ export default function Orders() {
                   Customer Information
                 </h3>
                 {(() => {
-                  const contact = contacts.find(c => c.id === selectedOrder.contactId);
+                  const contact = contacts.find(c => c.id === selectedOrder?.contactId);
                   if (!contact) return <p className="text-xs text-muted-foreground">No customer information attached</p>;
                   return (
                     <div className="bg-muted/40 rounded-lg p-3 space-y-2.5 text-sm">
@@ -578,12 +578,12 @@ export default function Orders() {
                           <span className="font-medium truncate max-w-[180px]">{contact.email}</span>
                         </div>
                       )}
-                      {(contact.customFields as any)?.address && (
+                      {(selectedOrder?.shippingAddress || (contact.customFields as any)?.address) && (
                         <div className="pt-1 border-t border-border/50">
                           <span className="text-xs text-muted-foreground block mb-1">Delivery Address</span>
                           <span className="font-medium text-xs flex items-start gap-1">
                             <MapPin className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                            <span>{(contact.customFields as any).address}</span>
+                            {selectedOrder?.shippingAddress || (contact.customFields as any)?.address}
                           </span>
                         </div>
                       )}
@@ -597,25 +597,29 @@ export default function Orders() {
               {/* Order Items */}
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                  <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                  Items
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  Order Items
                 </h3>
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border border-border/50 rounded-lg overflow-hidden">
                   <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="h-9 text-xs">Item</TableHead>
-                        <TableHead className="h-9 text-xs text-right w-16">Qty</TableHead>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="py-2 h-auto text-xs font-medium">Item Name</TableHead>
+                        <TableHead className="py-2 h-auto text-xs font-medium text-right w-[80px]">Qty</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
-                        (selectedOrder.items as any[]).map((item, idx) => (
-                          <TableRow key={idx} className="hover:bg-transparent">
-                            <TableCell className="py-2 text-xs font-medium">{item.name || "Unknown item"}</TableCell>
-                            <TableCell className="py-2 text-xs text-right font-medium">{item.quantity || 1}</TableCell>
-                          </TableRow>
-                        ))
+                      {Array.isArray(selectedOrder?.items) && selectedOrder!.items.length > 0 ? (
+                        (selectedOrder!.items as any[]).map((item, idx) => {
+                          const itemName = typeof item === 'string' ? item : (item.name || "Unknown item");
+                          const itemQty = typeof item === 'string' ? 1 : (item.quantity || 1);
+                          return (
+                            <TableRow key={idx} className="hover:bg-transparent">
+                              <TableCell className="py-2 text-xs font-medium">{itemName}</TableCell>
+                              <TableCell className="py-2 text-xs text-right font-medium">{itemQty}</TableCell>
+                            </TableRow>
+                          );
+                        })
                       ) : (
                         <TableRow>
                           <TableCell colSpan={2} className="py-3 text-center text-xs text-muted-foreground">

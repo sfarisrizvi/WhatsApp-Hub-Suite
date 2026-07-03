@@ -1,0 +1,232 @@
+{
+  "name": "Restaurant Operations Agent",
+  "description": "Full-featured conversational restaurant assistant workflow supporting order-taking, address collection via Flow, preorder confirmation, status checks, and time-restricted modifications.",
+  "nodes": [
+    {
+      "id": "webhook_trigger",
+      "type": "triggerNode",
+      "position": { "x": 0, "y": 300 },
+      "data": {
+        "label": "Incoming WhatsApp Message",
+        "triggerType": "webhook",
+        "method": "POST"
+      }
+    },
+    {
+      "id": "conversational_agent",
+      "type": "aiNode",
+      "position": { "x": 200, "y": 300 },
+      "data": {
+        "label": "CRM Conversational Agent",
+        "provider": "openai",
+        "knowledgeBaseId": "9f6e9e5c-6efa-461f-9122-467756907e02",
+        "systemMessage": "You are a conversational restaurant assistant for 'The Charcoal Grid'. Your job is to manage the user's order flow, FAQ/menu questions (using the attached knowledge base context), and coordinate updates or status queries.\n\nConversation Steps (State Machine):\n- Step A: Menu & Cart Selection (action: 'discuss_menu')\n  - If the user wants to order, ask what they would like, discuss items from the menu knowledge base.\n  - Maintain selected items list and total bill. Summarize selection with prices and ask for confirmation to proceed.\n  - Store the items and total in the 'cart' field.\n\n- Step B: Ask Address (action: 'send_address_flow')\n  - If user confirms they want to proceed, prompt them for a delivery address. Store the items and total in the 'cart' field.\n\n- Step C: Flow Address Submitted (action: 'show_preorder_summary')\n  - If incoming message body preview starts with '[Flow Submitted]', extract the address and show a preorder summary showing products, prices, total bill, standard delivery time (45 mins), and the delivery address. Ask them to confirm.\n\n- Step D: Order Final Confirmed (action: 'confirm_and_create_order')\n  - If user clicked 'Confirm Order' button or says they want to confirm preorder summary.\n\n- Step E: Status Tracking (action: 'check_status')\n  - If user asks for status of their order, extract the order number (ORD-XXXX) from history or message.\n\n- Step F: Order Modification (action: 'modify_order')\n  - If user wants to change/modify their order, verify if it is within 30 minutes. If yes, let them change items, recalculate total, and summarize changes. No need to ask for address again.\n\nCRITICAL: You MUST ALWAYS output your response as valid JSON with the following structure:\n{\n  \"ai_reply\": \"Friendly text response to send to the WhatsApp user...\",\n  \"metadata\": {\n    \"action\": \"discuss_menu\" | \"send_address_flow\" | \"show_preorder_summary\" | \"confirm_and_create_order\" | \"check_status\" | \"modify_order\",\n    \"cart\": { \"items\": [\"Classic Cheeseburger\", \"Truffle Fries\"], \"total_amount\": 1850 },\n    \"address\": \"submitted address string if present\",\n    \"order_number\": \"extracted or tracked order number if present\"\n  }\n}",
+        "prompt": "Incoming message from user: {{ $node['Incoming WhatsApp Message'].json.messageBody }}\n\nConversation History:\n{{ JSON.stringify($node['Incoming WhatsApp Message'].json.historyMessages) }}"
+      }
+    },
+    {
+      "id": "action_router",
+      "type": "switchNode",
+      "position": { "x": 450, "y": 300 },
+      "data": {
+        "label": "Route Intent",
+        "rules": [
+          { "value1": "{{ $node['conversational_agent'].json.parsed.metadata.action }}", "operator": "===", "value2": "discuss_menu" },
+          { "value1": "{{ $node['conversational_agent'].json.parsed.metadata.action }}", "operator": "===", "value2": "send_address_flow" },
+          { "value1": "{{ $node['conversational_agent'].json.parsed.metadata.action }}", "operator": "===", "value2": "show_preorder_summary" },
+          { "value1": "{{ $node['conversational_agent'].json.parsed.metadata.action }}", "operator": "===", "value2": "confirm_and_create_order" },
+          { "value1": "{{ $node['conversational_agent'].json.parsed.metadata.action }}", "operator": "===", "value2": "check_status" },
+          { "value1": "{{ $node['conversational_agent'].json.parsed.metadata.action }}", "operator": "===", "value2": "modify_order" }
+        ]
+      }
+    },
+    {
+      "id": "send_menu_reply",
+      "type": "messageNode",
+      "position": { "x": 700, "y": 50 },
+      "data": {
+        "label": "Send Menu Response",
+        "recipient": "{{ $node['Incoming WhatsApp Message'].json.message.from }}",
+        "messageType": "text",
+        "messageBody": "{{ $node['conversational_agent'].json.parsed.ai_reply }}"
+      }
+    },
+    {
+      "id": "save_cart_state",
+      "type": "databaseNode",
+      "position": { "x": 700, "y": 200 },
+      "data": {
+        "label": "Save Cart State",
+        "queryType": "structured",
+        "operation": "update",
+        "tableName": "contacts",
+        "fields": [
+          { "column": "custom_fields", "value": "{{ JSON.stringify({ cart: $node['conversational_agent'].json.parsed.metadata.cart }) }}" }
+        ],
+        "whereConditions": [
+          { "column": "id", "operator": "=", "value": "{{ $node['Incoming WhatsApp Message'].json.contact.id }}" }
+        ]
+      }
+    },
+    {
+      "id": "prompt_address_flow",
+      "type": "messageNode",
+      "position": { "x": 950, "y": 200 },
+      "data": {
+        "label": "Prompt Address Flow Form",
+        "recipient": "{{ $node['Incoming WhatsApp Message'].json.message.from }}",
+        "messageType": "flow",
+        "messageBody": "{{ $node['conversational_agent'].json.parsed.ai_reply }}",
+        "flowId": "3173922062798811",
+        "flowCta": "Enter Address",
+        "flowScreen": "ADDRESS_SCREEN",
+        "flowToken": "{{ $node['Incoming WhatsApp Message'].json.contact.id }}"
+      }
+    },
+    {
+      "id": "save_address_state",
+      "type": "databaseNode",
+      "position": { "x": 700, "y": 350 },
+      "data": {
+        "label": "Save Address State",
+        "queryType": "structured",
+        "operation": "update",
+        "tableName": "contacts",
+        "fields": [
+          { "column": "custom_fields", "value": "{{ JSON.stringify({ cart: ($node['Incoming WhatsApp Message'].json.contact.customFields.cart || $node['conversational_agent'].json.parsed.metadata.cart), address: $node['Incoming WhatsApp Message'].json.message.address }) }}" }
+        ],
+        "whereConditions": [
+          { "column": "id", "operator": "=", "value": "{{ $node['Incoming WhatsApp Message'].json.contact.id }}" }
+        ]
+      }
+    },
+    {
+      "id": "send_preorder_summary",
+      "type": "messageNode",
+      "position": { "x": 950, "y": 350 },
+      "data": {
+        "label": "Send Preorder Summary",
+        "recipient": "{{ $node['Incoming WhatsApp Message'].json.message.from }}",
+        "messageType": "buttons",
+        "messageBody": "{{ $node['conversational_agent'].json.parsed.ai_reply }}",
+        "buttons": ["Confirm Order"]
+      }
+    },
+    {
+      "id": "generate_order_number",
+      "type": "codeNode",
+      "position": { "x": 700, "y": 500 },
+      "data": {
+        "label": "Gen Order #",
+        "code": "const orderNum = 'ORD-' + Math.floor(100000 + Math.random() * 900000);\nreturn { order_number: orderNum };"
+      }
+    },
+    {
+      "id": "db_create_order",
+      "type": "databaseNode",
+      "position": { "x": 950, "y": 500 },
+      "data": {
+        "label": "Insert Final Order",
+        "queryType": "structured",
+        "operation": "insert",
+        "tableName": "orders",
+        "fields": [
+          { "column": "order_number", "value": "{{ $node['generate_order_number'].json.order_number }}" },
+          { "column": "items", "value": "{{ JSON.stringify($node['Incoming WhatsApp Message'].json.contact.customFields.cart.items) }}" },
+          { "column": "total_amount", "value": "{{ $node['Incoming WhatsApp Message'].json.contact.customFields.cart.total_amount }}" },
+          { "column": "shipping_address", "value": "{{ $node['Incoming WhatsApp Message'].json.contact.customFields.address }}" },
+          { "column": "contact_id", "value": "{{ $node['Incoming WhatsApp Message'].json.contact.id }}" },
+          { "column": "status", "value": "pending" }
+        ]
+      }
+    },
+    {
+      "id": "send_order_success",
+      "type": "messageNode",
+      "position": { "x": 1200, "y": 500 },
+      "data": {
+        "label": "Send Order Success",
+        "recipient": "{{ $node['Incoming WhatsApp Message'].json.message.from }}",
+        "messageType": "text",
+        "messageBody": "Your order has been successfully placed! 🎉\nOrder Number: {{ $node['generate_order_number'].json.order_number }}\nEstimated delivery time: 45 minutes.\nThank you for ordering from The Charcoal Grid!"
+      }
+    },
+    {
+      "id": "db_fetch_order",
+      "type": "databaseNode",
+      "position": { "x": 700, "y": 650 },
+      "data": {
+        "label": "Fetch Order",
+        "queryType": "structured",
+        "operation": "select",
+        "tableName": "orders",
+        "whereConditions": [
+          { "column": "order_number", "operator": "=", "value": "{{ $node['conversational_agent'].json.parsed.metadata.order_number }}" }
+        ]
+      }
+    },
+    {
+      "id": "send_status_reply",
+      "type": "messageNode",
+      "position": { "x": 950, "y": 650 },
+      "data": {
+        "label": "Send Status Response",
+        "recipient": "{{ $node['Incoming WhatsApp Message'].json.message.from }}",
+        "messageType": "text",
+        "messageBody": "{{ $node['conversational_agent'].json.parsed.ai_reply }}\n\nCurrent Status: {{ $node['db_fetch_order'].json[0].status }}"
+      }
+    },
+    {
+      "id": "db_modify_order",
+      "type": "databaseNode",
+      "position": { "x": 700, "y": 800 },
+      "data": {
+        "label": "Modify Order",
+        "queryType": "structured",
+        "operation": "update",
+        "tableName": "orders",
+        "fields": [
+          { "column": "items", "value": "{{ JSON.stringify($node['conversational_agent'].json.parsed.metadata.cart.items) }}" },
+          { "column": "total_amount", "value": "{{ $node['conversational_agent'].json.parsed.metadata.cart.total_amount }}" }
+        ],
+        "whereConditions": [
+          { "column": "order_number", "operator": "=", "value": "{{ $node['conversational_agent'].json.parsed.metadata.order_number }}" }
+        ]
+      }
+    },
+    {
+      "id": "send_modify_summary",
+      "type": "messageNode",
+      "position": { "x": 950, "y": 800 },
+      "data": {
+        "label": "Send Modification Confirmation",
+        "recipient": "{{ $node['Incoming WhatsApp Message'].json.message.from }}",
+        "messageType": "buttons",
+        "messageBody": "{{ $node['conversational_agent'].json.parsed.ai_reply }}",
+        "buttons": ["Confirm Order"]
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trig_to_ai", "source": "webhook_trigger", "target": "conversational_agent" },
+    { "id": "e_ai_to_router", "source": "conversational_agent", "target": "action_router" },
+    
+    { "id": "e_route_menu", "source": "action_router", "target": "send_menu_reply", "sourceHandle": "0" },
+    
+    { "id": "e_route_address_flow", "source": "action_router", "target": "save_cart_state", "sourceHandle": "1" },
+    { "id": "e_save_cart_to_flow", "source": "save_cart_state", "target": "prompt_address_flow" },
+    
+    { "id": "e_route_preorder_summary", "source": "action_router", "target": "save_address_state", "sourceHandle": "2" },
+    { "id": "e_save_address_to_summary", "source": "save_address_state", "target": "send_preorder_summary" },
+    
+    { "id": "e_route_confirm_order", "source": "action_router", "target": "generate_order_number", "sourceHandle": "3" },
+    { "id": "e_gen_to_create", "source": "generate_order_number", "target": "db_create_order" },
+    { "id": "e_create_to_success", "source": "db_create_order", "target": "send_order_success" },
+    
+    { "id": "e_route_status", "source": "action_router", "target": "db_fetch_order", "sourceHandle": "4" },
+    { "id": "e_fetch_to_reply", "source": "db_fetch_order", "target": "send_status_reply" },
+    
+    { "id": "e_route_modify", "source": "action_router", "target": "db_modify_order", "sourceHandle": "5" },
+    { "id": "e_modify_to_summary", "source": "db_modify_order", "target": "send_modify_summary" }
+  ]
+}

@@ -1469,12 +1469,27 @@ export async function registerRoutes(
         return res.json({ reply: null, info: "No active workflow found. Activate a workflow in the Automations page first." });
       }
 
+      let simulatedMessage: any = {
+        body: content,
+        from: "sandbox_test_phone",
+        from_name: "Sandbox Customer"
+      };
+
+      if (typeof content === "string" && content.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(content);
+          simulatedMessage = {
+            ...simulatedMessage,
+            ...parsed,
+            body: parsed.body || parsed.message || `[Flow Submitted] ${JSON.stringify(parsed)}`
+          };
+        } catch (e) {
+          // Fall back to simple text if JSON parsing fails
+        }
+      }
+
       const payload = {
-        message: {
-          body: content,
-          from: "sandbox_test_phone",
-          from_name: "Sandbox Customer"
-        },
+        message: simulatedMessage,
         session: { thread_id: "sandbox_session" }
       };
 

@@ -194,6 +194,11 @@ export async function executeWorkflow(
       context.$node[node.id] = { json: nodeData, binary: context.$binary };
       context.$node[nodeLabel] = { json: nodeData, binary: context.$binary };
 
+      // Debug: log node output for test runs
+      if (isTestRun) {
+        console.log(`[DAG Engine][Test] Node "${nodeLabel}" status=${nodeStatus} output=`, JSON.stringify(nodeData).substring(0, 300));
+      }
+
       // Update $json pointer to point to the output of the most recently executed node
       context.$json = nodeData;
 
@@ -255,14 +260,17 @@ export async function executeWorkflow(
     for (const nodeKey of Object.keys(context.$node)) {
       const nodeJson = context.$node[nodeKey]?.json;
       if (nodeJson?.sentText) {
+        console.log(`[DAG Engine] Found sentText in node "${nodeKey}": ${nodeJson.sentText.substring(0, 100)}`);
         botReplyText = nodeJson.sentText;
         break;
       }
       // Also check AI node output text
       if (nodeJson?.text && typeof nodeJson.text === "string") {
         botReplyText = nodeJson.text;
-        // Keep scanning — prefer sentText from a Message node if one exists
       }
+    }
+    if (!botReplyText) {
+      console.log("[DAG Engine] No sentText or text found in any node. Executed nodes:", Object.keys(context.$node).join(", "));
     }
     const testOutputText = botReplyText || JSON.stringify(context.$json);
     return { 

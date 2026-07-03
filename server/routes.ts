@@ -1455,8 +1455,9 @@ export async function registerRoutes(
 
       console.log(`[Sandbox] Running workflow ${activeWorkflow.id} with message: "${content}"`);
       const result = await executeWorkflow(activeWorkflow.id, payload, true);
+      console.log(`[Sandbox] Full result → botReply="${result.botReply}" testOutput="${String(result.testOutput).substring(0, 200)}"`);
       const reply = result.botReply || result.testOutput || null;
-      console.log(`[Sandbox] Bot replied: "${reply}"`);
+      console.log(`[Sandbox] Sending reply to client: "${String(reply).substring(0, 200)}"`);
 
       res.json({ reply });
     } catch (error: any) {

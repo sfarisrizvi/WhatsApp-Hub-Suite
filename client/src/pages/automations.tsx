@@ -7,7 +7,7 @@ import '@xyflow/react/dist/style.css';
 import { 
   Zap, BrainCircuit, MessageCircle, Database, Settings2, X, MessageSquare, ArrowRight, Save, Trash, RotateCcw, 
   Globe, SplitSquareHorizontal, Waypoints, Play,
-  Code, Repeat, Hourglass, Wrench, AlertTriangle, Shield, FileArchive, FileCode2
+  Code, Repeat, Hourglass, Wrench, AlertTriangle, Shield, FileArchive, FileCode2, Upload
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useContainer } from "@/lib/container-context";
@@ -21,6 +21,10 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
 
 // ============================================================================
 // 1. CUSTOM NODES
@@ -233,6 +237,11 @@ export default function Automations() {
   
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState("V2 Automation Flow");
+
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importJsonContent, setImportJsonContent] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newWfName, setNewWfName] = useState("");
   
   // Local Testing State
   const [chatHistory, setChatHistory] = useState<{role: "user"|"bot", content: string}[]>([]);
@@ -292,6 +301,41 @@ export default function Automations() {
   // Single Node Test Placeholder
   const testSingleNode = async () => {
     toast({ title: "Node Execution", description: "This will run the executor for this node in isolation (UI feature coming soon)." });
+  };
+
+  const handleImportJson = () => {
+    try {
+      const parsed = JSON.parse(importJsonContent);
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("JSON is not an object");
+      }
+      if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+        throw new Error("JSON must contain 'nodes' and 'edges' arrays");
+      }
+      
+      setNodes(parsed.nodes);
+      setEdges(parsed.edges);
+      if (parsed.name) {
+        setWorkflowName(parsed.name);
+      }
+      
+      setIsImportDialogOpen(false);
+      setImportJsonContent("");
+      toast({ title: "Import Successful", description: "Workflow parsed onto canvas. Click Save to persist." });
+    } catch (err: any) {
+      toast({ title: "Invalid JSON", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateNewWorkflow = () => {
+    if (!newWfName) return;
+    setWorkflowId(null);
+    setWorkflowName(newWfName);
+    setNodes([]);
+    setEdges([]);
+    setNewWfName("");
+    setIsCreateDialogOpen(false);
+    toast({ title: "New Workflow Initialized", description: `Started fresh workflow "${newWfName}"` });
   };
 
   const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#10b981', strokeWidth: 2 } }, eds)), [setEdges]);
@@ -420,9 +464,84 @@ export default function Automations() {
 
       {/* CANVAS */}
       <div className="flex-1 flex flex-col relative">
-        <div className="absolute top-4 left-4 z-10 flex gap-2">
-          <Input value={workflowName} onChange={(e) => setWorkflowName(e.target.value)} className="w-64 bg-white/80 font-semibold" />
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}><Save className="w-4 h-4 mr-2" /> Save</Button>
+        <div className="absolute top-4 left-4 z-10 flex gap-2 items-center bg-white/90 p-2 rounded-lg border shadow-sm">
+          <Select 
+            value={workflowId || ""} 
+            onValueChange={(val) => {
+              if (val === "new") {
+                setIsCreateDialogOpen(true);
+              } else {
+                const selected = (workflows || []).find((w: any) => w.id === val);
+                if (selected) {
+                  setWorkflowId(selected.id);
+                  setWorkflowName(selected.name);
+                  setNodes(selected.nodes || []);
+                  setEdges(selected.edges || []);
+                }
+              }
+            }}
+          >
+            <SelectTrigger className="w-56 font-semibold"><SelectValue placeholder="Select Workflow" /></SelectTrigger>
+            <SelectContent>
+              {workflows && workflows.map((w: any) => (
+                <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+              ))}
+              <SelectItem value="new">+ Create New Workflow</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="sm">
+            <Save className="w-4 h-4 mr-2" /> Save
+          </Button>
+
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Workflow</DialogTitle>
+                <DialogDescription>Start fresh with a clean canvas.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label>Workflow Name</Label>
+                  <Input 
+                    placeholder="e.g. Lead Follow-up Automation" 
+                    value={newWfName} 
+                    onChange={(e) => setNewWfName(e.target.value)} 
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleCreateNewWorkflow} disabled={!newWfName}>Create</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="absolute top-4 right-4 z-10 flex gap-2">
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="bg-white/90 shadow-sm" size="sm">
+                <Upload className="w-4 h-4 mr-2" /> Import JSON
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Import Workflow Template</DialogTitle>
+                <DialogDescription>Paste the workflow JSON config to render it instantly.</DialogDescription>
+              </DialogHeader>
+              <div className="py-2">
+                <Textarea 
+                  placeholder='{ "name": "My Flow", "nodes": [...], "edges": [...] }' 
+                  className="font-mono text-xs h-64" 
+                  value={importJsonContent} 
+                  onChange={(e) => setImportJsonContent(e.target.value)} 
+                />
+              </div>
+              <DialogFooter>
+                <Button onClick={handleImportJson} disabled={!importJsonContent}>Import Template</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver} onSelectionChange={onSelectionChange} nodeTypes={nodeTypes} fitView className="flex-1">
           <Background color="#ccc" gap={16} />

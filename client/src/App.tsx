@@ -35,6 +35,7 @@ import Orders from "@/pages/orders";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Knowledge from "@/pages/knowledge";
+import { SandboxBubble } from "@/components/sandbox-bubble";
 
 function NotificationBell() {
   const { data: notifications = [] } = useQuery<Notification[]>({
@@ -148,6 +149,7 @@ function AuthenticatedApp() {
               </main>
             </div>
           </div>
+          <SandboxBubble />
         </SidebarProvider>
       </WSProvider>
     </ContainerProvider>

@@ -1423,6 +1423,181 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/sandbox/message", isAuthenticated, async (req: any, res) => {
+    try {
+      const { content } = req.body;
+      const userId = req.session.userId!;
+      
+      const container = await db.query.containers.findFirst({
+        where: eq(containers.ownerId, userId)
+      });
+      if (!container) return res.status(404).json({ error: "No active container found" });
+
+      let contact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.containerId, container.id),
+          eq(contacts.phone, "sandbox_test_phone")
+        )
+      });
+      if (!contact) {
+        [contact] = await db.insert(contacts).values({
+          containerId: container.id,
+          name: "Sandbox Customer",
+          phone: "sandbox_test_phone"
+        }).returning();
+      }
+
+      let conv = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.containerId, container.id),
+          eq(conversations.contactId, contact.id)
+        )
+      });
+      if (!conv) {
+        [conv] = await db.insert(conversations).values({
+          containerId: container.id,
+          contactId: contact.id,
+          status: "open"
+        }).returning();
+      }
+
+      const newMessage = await storage.createMessage({
+        conversationId: conv.id,
+        content: content,
+        isFromContact: true,
+      });
+
+      await storage.updateConversation(conv.id, { lastMessageAt: new Date() });
+
+      broadcastToUser(userId, {
+        type: "new_message",
+        message: newMessage,
+        conversationId: conv.id,
+        containerId: container.id,
+      });
+
+      const activeWorkflow = await db.query.workflows.findFirst({
+        where: and(
+          eq(workflows.containerId, container.id),
+          eq(workflows.isActive, true)
+        )
+      });
+
+      let testOutput = "";
+      if (activeWorkflow) {
+        console.log(`[Sandbox Bubble] Triggering workflow ${activeWorkflow.id}`);
+        const payload = {
+          message: {
+            body: content,
+            from: "sandbox_test_phone",
+            from_name: "Sandbox Customer"
+          },
+          session: {
+            thread_id: conv.id,
+          }
+        };
+        const result = await executeWorkflow(activeWorkflow.id, payload, true);
+        testOutput = result.testOutput;
+      }
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const dbMessages = await db.query.messages.findMany({
+        where: and(
+          eq(messages.conversationId, conv.id),
+          gt(messages.createdAt, oneHourAgo)
+        ),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)]
+      });
+
+      const history = dbMessages.map(msg => ({
+        role: msg.isFromContact ? "user" : "bot",
+        content: msg.content,
+        createdAt: msg.createdAt
+      }));
+
+      res.json({ history, response: testOutput });
+    } catch (error: any) {
+      console.error("[Sandbox message error]", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/sandbox/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId!;
+      const container = await db.query.containers.findFirst({
+        where: eq(containers.ownerId, userId)
+      });
+      if (!container) return res.json({ history: [] });
+
+      const contact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.containerId, container.id),
+          eq(contacts.phone, "sandbox_test_phone")
+        )
+      });
+      if (!contact) return res.json({ history: [] });
+
+      const conv = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.containerId, container.id),
+          eq(conversations.contactId, contact.id)
+        )
+      });
+      if (!conv) return res.json({ history: [] });
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const dbMessages = await db.query.messages.findMany({
+        where: and(
+          eq(messages.conversationId, conv.id),
+          gt(messages.createdAt, oneHourAgo)
+        ),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)]
+      });
+
+      const history = dbMessages.map(msg => ({
+        role: msg.isFromContact ? "user" : "bot",
+        content: msg.content,
+        createdAt: msg.createdAt
+      }));
+
+      res.json({ history });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/sandbox/reset", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId!;
+      const container = await db.query.containers.findFirst({
+        where: eq(containers.ownerId, userId)
+      });
+      if (!container) return res.json({ success: true });
+
+      const contact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.containerId, container.id),
+          eq(contacts.phone, "sandbox_test_phone")
+        )
+      });
+      if (contact) {
+        const conv = await db.query.conversations.findFirst({
+          where: and(
+            eq(conversations.containerId, container.id),
+            eq(conversations.contactId, contact.id)
+          )
+        });
+        if (conv) {
+          await db.delete(messages).where(eq(messages.conversationId, conv.id));
+        }
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==============================================================================
 
 return httpServer;

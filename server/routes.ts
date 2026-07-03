@@ -1086,11 +1086,22 @@ export async function registerRoutes(
         return res.status(400).send("Bad Request: Missing flow variables");
       }
 
-      const privateKeyPEM = process.env.FLOW_PRIVATE_KEY?.replace(/\\n/g, "\n");
+      let privateKeyPEM = process.env.FLOW_PRIVATE_KEY;
       if (!privateKeyPEM) {
         console.error("[Flow Endpoint] FLOW_PRIVATE_KEY is missing from environment variables.");
         return res.status(500).send("Server Configuration Error");
       }
+
+      // Strip potential single or double quotes wrapped by Hostinger's environment loader
+      privateKeyPEM = privateKeyPEM.trim();
+      if (privateKeyPEM.startsWith("'") && privateKeyPEM.endsWith("'")) {
+        privateKeyPEM = privateKeyPEM.slice(1, -1);
+      } else if (privateKeyPEM.startsWith('"') && privateKeyPEM.endsWith('"')) {
+        privateKeyPEM = privateKeyPEM.slice(1, -1);
+      }
+      
+      // Replace literal escaped \n with actual newlines
+      privateKeyPEM = privateKeyPEM.replace(/\\n/g, "\n");
 
       // 1. Decrypt the AES key
       const decryptedAesKey = crypto.privateDecrypt(

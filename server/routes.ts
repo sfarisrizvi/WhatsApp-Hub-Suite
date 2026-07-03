@@ -1423,13 +1423,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sandbox/message", isAuthenticated, async (req: any, res) => {
+  app.post("/api/containers/:containerId/sandbox/message", isAuthenticated, async (req: any, res) => {
     try {
+      const { containerId } = req.params;
       const { content } = req.body;
       const userId = req.session.userId!;
       
       const container = await db.query.containers.findFirst({
-        where: eq(containers.ownerId, userId)
+        where: eq(containers.id, containerId)
       });
       if (!container) return res.status(404).json({ error: "No active container found" });
 
@@ -1522,11 +1523,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sandbox/history", isAuthenticated, async (req: any, res) => {
+  app.get("/api/containers/:containerId/sandbox/history", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.session.userId!;
+      const { containerId } = req.params;
       const container = await db.query.containers.findFirst({
-        where: eq(containers.ownerId, userId)
+        where: eq(containers.id, containerId)
       });
       if (!container) return res.json({ history: [] });
 
@@ -1567,11 +1568,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sandbox/reset", isAuthenticated, async (req: any, res) => {
+  app.post("/api/containers/:containerId/sandbox/reset", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.session.userId!;
+      const { containerId } = req.params;
       const container = await db.query.containers.findFirst({
-        where: eq(containers.ownerId, userId)
+        where: eq(containers.id, containerId)
       });
       if (!container) return res.json({ success: true });
 

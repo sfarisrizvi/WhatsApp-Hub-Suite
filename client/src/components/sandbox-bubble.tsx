@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { MessageSquare, X, Send, RotateCcw, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useWS } from "@/lib/ws-context";
+import { useContainer } from "@/lib/container-context";
 
 interface ChatMessage {
   role: "user" | "bot";
@@ -18,11 +19,13 @@ export function SandboxBubble() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { lastMessage } = useWS();
+  const { activeContainer } = useContainer();
+  const cid = activeContainer?.id;
 
   // Load chat history
   const { data: historyData, isLoading } = useQuery<{ history: ChatMessage[] }>({
-    queryKey: ["/api/sandbox/history"],
-    enabled: isOpen,
+    queryKey: ["/api/containers", cid, "sandbox", "history"],
+    enabled: isOpen && !!cid,
   });
 
   const chatHistory = historyData?.history || [];
@@ -40,7 +43,7 @@ export function SandboxBubble() {
 
   // Sync sandbox messages in real-time if open
   useEffect(() => {
-    if (!lastMessage || !isOpen) return;
+    if (!lastMessage || !isOpen || !cid) return;
     
     // Check if the received message belongs to the sandbox conversation
     if (
@@ -49,38 +52,52 @@ export function SandboxBubble() {
       chatHistory.length > 0
     ) {
       // Invalidate query to pull new message
-      queryClient.invalidateQueries({ queryKey: ["/api/sandbox/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "sandbox", "history"] });
     }
-  }, [lastMessage, isOpen, queryClient]);
+  }, [lastMessage, isOpen, cid, queryClient]);
 
   // Send message mutation
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
-      const res = await apiRequest("POST", "/api/sandbox/message", { content });
+      if (!cid) throw new Error("No active container");
+      const res = await apiRequest("POST", `/api/containers/${cid}/sandbox/message`, { content });
       return res.json ? await res.json() : res;
     },
     onMutate: async (newMsg) => {
       setInputVal("");
+      if (!cid) return;
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["/api/sandbox/history"] });
+      await queryClient.cancelQueries({ queryKey: ["/api/containers", cid, "sandbox", "history"] });
       
       // Snapshot the previous value
-      const previousHistory = queryClient.getQueryData<{ history: ChatMessage[] }>(["/api/sandbox/history"]);
+      const previousHistory = queryClient.getQueryData<{ history: ChatMessage[] }>([
+        "/api/containers", cid, "sandbox", "history"
+      ]);
 
       // Optimistically update
-      queryClient.setQueryData<{ history: ChatMessage[] }>(["/api/sandbox/history"], (old) => ({
+      queryClient.setQueryData<{ history: ChatMessage[] }>([
+        "/api/containers", cid, "sandbox", "history"
+      ], (old) => ({
         history: [...(old?.history || []), { role: "user", content: newMsg }]
       }));
 
       return { previousHistory };
     },
     onError: (err, newMsg, context: any) => {
-      queryClient.setQueryData(["/api/sandbox/history"], context.previousHistory);
+      if (cid) {
+        queryClient.setQueryData([
+          "/api/containers", cid, "sandbox", "history"
+        ], context?.previousHistory);
+      }
     },
     onSuccess: (data) => {
-      queryClient.setQueryData<{ history: ChatMessage[] }>(["/api/sandbox/history"], {
-        history: data.history
-      });
+      if (cid) {
+        queryClient.setQueryData<{ history: ChatMessage[] }>([
+          "/api/containers", cid, "sandbox", "history"
+        ], {
+          history: data.history
+        });
+      }
       // Invalidate queries to refresh CRM Inbox if open
       queryClient.invalidateQueries({ queryKey: ["/api/containers"] });
     },
@@ -89,10 +106,15 @@ export function SandboxBubble() {
   // Reset conversation history
   const resetMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/sandbox/reset");
+      if (!cid) throw new Error("No active container");
+      await apiRequest("POST", `/api/containers/${cid}/sandbox/reset`);
     },
     onSuccess: () => {
-      queryClient.setQueryData<{ history: ChatMessage[] }>(["/api/sandbox/history"], { history: [] });
+      if (cid) {
+        queryClient.setQueryData<{ history: ChatMessage[] }>([
+          "/api/containers", cid, "sandbox", "history"
+        ], { history: [] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/containers"] });
     }
   });

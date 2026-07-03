@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, X, Send, RotateCcw, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { useWS } from "@/lib/ws-context";
 import { useContainer } from "@/lib/container-context";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,113 +16,75 @@ interface ChatMessage {
 export function SandboxBubble() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputVal, setInputVal] = useState("");
-  const queryClient = useQueryClient();
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { lastMessage } = useWS();
   const { activeContainer } = useContainer();
   const cid = activeContainer?.id;
   const { toast } = useToast();
 
-  // Load chat history
-  const { data: historyData, isLoading } = useQuery<{ history: ChatMessage[] }>({
-    queryKey: ["/api/containers", cid, "sandbox", "history"],
-    enabled: isOpen && !!cid,
-  });
-
-  const chatHistory = historyData?.history || [];
-
-  // Scroll to bottom helper
-  const scrollToBottom = () => {
+  // Scroll to bottom when history updates
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, [chatHistory]);
 
+  // Load history from server when chat opens
   useEffect(() => {
-    if (isOpen) {
-      scrollToBottom();
-    }
-  }, [chatHistory, isOpen]);
+    if (!isOpen || !cid) return;
 
-  // Sync sandbox messages in real-time if open
-  useEffect(() => {
-    if (!lastMessage || !isOpen || !cid) return;
-    
-    // Check if the received message belongs to the sandbox conversation
-    if (
-      lastMessage.type === "new_message" &&
-      lastMessage.message?.conversationId &&
-      chatHistory.length > 0
-    ) {
-      // Invalidate query to pull new message
-      queryClient.invalidateQueries({ queryKey: ["/api/containers", cid, "sandbox", "history"] });
-    }
-  }, [lastMessage, isOpen, cid, queryClient]);
+    setIsLoadingHistory(true);
+    fetch(`/api/containers/${cid}/sandbox/history`, { credentials: "include" })
+      .then(r => r.json())
+      .then(data => {
+        setChatHistory(data.history || []);
+      })
+      .catch(err => {
+        console.error("[Sandbox] Failed to load history:", err);
+      })
+      .finally(() => setIsLoadingHistory(false));
+  }, [isOpen, cid]);
 
-  // Send message mutation
+  // Send message — state is driven entirely by server response
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
-      if (!cid) throw new Error("No active container");
+      if (!cid) throw new Error("No active container selected");
       const res = await apiRequest("POST", `/api/containers/${cid}/sandbox/message`, { content });
-      return res.json ? await res.json() : res;
+      return await res.json();
     },
-    onMutate: async (newMsg) => {
+    onMutate: (content) => {
+      // Immediately show user message so it doesn't vanish
       setInputVal("");
-      if (!cid) return;
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["/api/containers", cid, "sandbox", "history"] });
-      
-      // Snapshot the previous value
-      const previousHistory = queryClient.getQueryData<{ history: ChatMessage[] }>([
-        "/api/containers", cid, "sandbox", "history"
-      ]);
-
-      // Optimistically update
-      queryClient.setQueryData<{ history: ChatMessage[] }>([
-        "/api/containers", cid, "sandbox", "history"
-      ], (old) => ({
-        history: [...(old?.history || []), { role: "user", content: newMsg }]
-      }));
-
-      return { previousHistory };
+      setChatHistory(prev => [...prev, { role: "user", content }]);
     },
-    onError: (err, newMsg, context: any) => {
-      if (cid) {
-        queryClient.setQueryData([
-          "/api/containers", cid, "sandbox", "history"
-        ], context?.previousHistory);
+    onSuccess: (data) => {
+      // Replace with authoritative server history (includes bot reply)
+      if (Array.isArray(data.history)) {
+        setChatHistory(data.history);
       }
+    },
+    onError: (err: any) => {
+      // Remove the optimistically added user message on failure
+      setChatHistory(prev => prev.slice(0, -1));
       toast({
         variant: "destructive",
         title: "Sandbox Error",
         description: err.message,
       });
     },
-    onSuccess: (data) => {
-      if (cid) {
-        queryClient.setQueryData<{ history: ChatMessage[] }>([
-          "/api/containers", cid, "sandbox", "history"
-        ], {
-          history: data.history
-        });
-      }
-      // Invalidate queries to refresh CRM Inbox if open
-      queryClient.invalidateQueries({ queryKey: ["/api/containers"] });
-    },
   });
 
   // Reset conversation history
   const resetMutation = useMutation({
     mutationFn: async () => {
-      if (!cid) throw new Error("No active container");
+      if (!cid) throw new Error("No active container selected");
       await apiRequest("POST", `/api/containers/${cid}/sandbox/reset`);
     },
     onSuccess: () => {
-      if (cid) {
-        queryClient.setQueryData<{ history: ChatMessage[] }>([
-          "/api/containers", cid, "sandbox", "history"
-        ], { history: [] });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/containers"] });
-    }
+      setChatHistory([]);
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Reset Failed", description: err.message });
+    },
   });
 
   const handleSend = (e: React.FormEvent) => {
@@ -141,12 +102,16 @@ export function SandboxBubble() {
         title="Open Sandbox Test Chat"
         data-testid="sandbox-chat-bubble-trigger"
       >
-        {isOpen ? <X className="w-6 h-6 animate-in fade-in zoom-in duration-200" /> : <MessageSquare className="w-6 h-6 animate-in fade-in zoom-in duration-200" />}
+        {isOpen
+          ? <X className="w-6 h-6 animate-in fade-in zoom-in duration-200" />
+          : <MessageSquare className="w-6 h-6 animate-in fade-in zoom-in duration-200" />
+        }
       </button>
 
       {/* CHAT WINDOW */}
       {isOpen && (
         <div className="fixed bottom-24 right-6 z-50 w-[350px] h-[480px] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 fade-in duration-300">
+
           {/* HEADER */}
           <div className="bg-emerald-500 text-white px-4 py-3 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2">
@@ -163,9 +128,7 @@ export function SandboxBubble() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => {
-                  if (confirm("Reset conversation history?")) resetMutation.mutate();
-                }}
+                onClick={() => { if (confirm("Reset conversation history?")) resetMutation.mutate(); }}
                 disabled={resetMutation.isPending}
                 className="h-7 w-7 text-white hover:bg-emerald-600/50 rounded-full"
                 title="Reset History"
@@ -185,13 +148,13 @@ export function SandboxBubble() {
 
           {/* MESSAGE STREAM */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-1.5">
+            {isLoadingHistory ? (
+              <div className="flex flex-col items-center justify-center h-full gap-1.5">
                 <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-                <span className="text-xs">Loading history...</span>
+                <span className="text-xs text-slate-400">Loading history...</span>
               </div>
             ) : chatHistory.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
+              <div className="flex flex-col items-center justify-center h-full text-center px-4">
                 <MessageSquare className="w-8 h-8 text-slate-300 mb-2" />
                 <h5 className="font-medium text-xs text-slate-700">Simulate WhatsApp Customer</h5>
                 <p className="text-[11px] text-slate-400 mt-0.5 leading-normal">
@@ -200,22 +163,18 @@ export function SandboxBubble() {
               </div>
             ) : (
               chatHistory.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-normal shadow-sm ${
-                      msg.role === "user"
-                        ? "bg-emerald-500 text-white rounded-br-none"
-                        : "bg-white text-slate-800 border border-slate-200/60 rounded-bl-none"
-                    }`}
-                  >
+                <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-normal shadow-sm ${
+                    msg.role === "user"
+                      ? "bg-emerald-500 text-white rounded-br-none"
+                      : "bg-white text-slate-800 border border-slate-200/60 rounded-bl-none"
+                  }`}>
                     {msg.content}
                   </div>
                 </div>
               ))
             )}
+
             {sendMutation.isPending && (
               <div className="flex justify-start">
                 <div className="bg-white border border-slate-200/60 rounded-2xl rounded-bl-none px-3 py-2 text-xs shadow-sm flex items-center gap-1 text-slate-400">

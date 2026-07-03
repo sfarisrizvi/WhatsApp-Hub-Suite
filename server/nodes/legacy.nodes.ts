@@ -130,13 +130,24 @@ export class AiNodeExecutor extends BaseNodeExecutor {
       const rawContent = response.content as string;
       
       // Try to parse as JSON just in case they requested JSON in prompt
-      let parsedOutput = rawContent;
+      let parsedOutput: any = rawContent;
       try {
         const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)\s*```/) || rawContent.match(/{[\s\S]*}/);
         if (jsonMatch) parsedOutput = JSON.parse(jsonMatch[1] || jsonMatch[0]);
       } catch (e) {}
-      
-      return { status: "success", data: { text: rawContent, parsed: parsedOutput }, nextEdges: outgoingEdges.map(e => e.id) };
+
+      // Extract a category value: if parsedOutput is an object with a category/intent/action field, use it
+      // Otherwise use the trimmed text directly (for simple single-word classification responses)
+      const categoryRaw: string = (typeof parsedOutput === "object" && parsedOutput !== null)
+        ? (parsedOutput.category || parsedOutput.intent || parsedOutput.action || rawContent)
+        : rawContent;
+      const category = categoryRaw.trim().toLowerCase().replace(/['"]/g, "");
+
+      return { 
+        status: "success", 
+        data: { text: rawContent, parsed: parsedOutput, category }, 
+        nextEdges: outgoingEdges.map(e => e.id) 
+      };
     } catch (err: any) {
       return { status: "failed", error: err.message };
     }

@@ -1,37 +1,78 @@
-// Resilient CRM Automation Engine
-// Aligned with DB columns (started_at, completed_at, error_message, trigger_payload)
-import { db, dbEvents } from "./db";
-import { workflows, workflowRuns, workflowNodeLogs, contacts, conversations, messages, containers, orders } from "../shared/schema";
-import { storage } from "./storage";
-import { eq, and, gt, ne } from "drizzle-orm";
-import { ChatOpenAI } from "@langchain/openai";
-import { z } from "zod";
-import { StructuredOutputParser } from "@langchain/core/output_parsers";
-import { PromptTemplate } from "@langchain/core/prompts";
-import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import { db } from "./db";
+import { workflows, workflowRuns, workflowNodeLogs, workflowPauses } from "../shared/schema";
+import { eq, lte, and } from "drizzle-orm";
+import { ExpressionContext } from "./expression-parser";
+import { BaseNodeExecutor } from "./nodes/base.node";
+import { HttpNodeExecutor } from "./nodes/http.node";
+import { DatabaseNodeExecutor } from "./nodes/database.node";
+import { IfNodeExecutor } from "./nodes/if.node";
+import { SwitchNodeExecutor } from "./nodes/switch.node";
+import { CodeNodeExecutor } from "./nodes/code.node";
+import { LoopNodeExecutor } from "./nodes/loop.node";
+import { WaitNodeExecutor } from "./nodes/wait.node";
+import { SetNodeExecutor } from "./nodes/set.node";
+import { ErrorNodeExecutor } from "./nodes/error.node";
+import { TriggerNodeExecutor, AiNodeExecutor, MessageNodeExecutor, ActionNodeExecutor } from "./nodes/legacy.nodes";
+import { CryptoNodeExecutor } from "./nodes/crypto.node";
+import { CompressNodeExecutor } from "./nodes/compress.node";
+import { FormatNodeExecutor } from "./nodes/format.node";
 
-export async function executeWorkflow(workflowId: string, payload: any, isTestRun: boolean = false) {
-  console.log(`[Engine] Executing V2 Workflow ${workflowId} (Test: ${isTestRun})`);
+const MAX_EXECUTION_DEPTH = 50000;
+const DEFAULT_NODE_TIMEOUT_MS = 30000; // 30 seconds
 
-  // 1. Fetch Workflow
-  const wf = await db.query.workflows.findFirst({
-    where: eq(workflows.id, workflowId),
+const NODE_REGISTRY: Record<string, BaseNodeExecutor> = {
+  "triggerNode": new TriggerNodeExecutor(),
+  "aiNode": new AiNodeExecutor(),
+  "messageNode": new MessageNodeExecutor(),
+  "actionNode": new ActionNodeExecutor(),
+  "httpNode": new HttpNodeExecutor(),
+  "databaseNode": new DatabaseNodeExecutor(),
+  "ifNode": new IfNodeExecutor(),
+  "switchNode": new SwitchNodeExecutor(),
+  "codeNode": new CodeNodeExecutor(),
+  "loopNode": new LoopNodeExecutor(),
+  "waitNode": new WaitNodeExecutor(),
+  "setNode": new SetNodeExecutor(),
+  "errorNode": new ErrorNodeExecutor(),
+  "cryptoNode": new CryptoNodeExecutor(),
+  "compressNode": new CompressNodeExecutor(),
+  "formatNode": new FormatNodeExecutor(),
+};
+
+/**
+ * Helper to run a promise with a timeout.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error(errorMessage)), ms);
   });
+  return Promise.race([
+    promise,
+    timeoutPromise
+  ]).finally(() => clearTimeout(timeoutHandle));
+}
 
+export async function executeWorkflow(
+  workflowId: string, 
+  payload: any, 
+  isTestRun: boolean = false,
+  resumeState?: { runId: string; context: ExpressionContext; queue: {nodeId: string}[] }
+) {
+  console.log(`[DAG Engine] Starting execution for Workflow ${workflowId} (Test: ${isTestRun}, Resumed: ${!!resumeState})`);
+
+  const wf = await db.query.workflows.findFirst({ where: eq(workflows.id, workflowId) });
   if (!wf) throw new Error("Workflow not found");
-  if (!wf.isActive && !isTestRun) {
-    console.log("[Engine] Workflow inactive, aborting.");
-    return { status: "aborted", reason: "inactive" };
-  }
+  if (!wf.isActive && !isTestRun) return { status: "aborted", reason: "inactive" };
 
-  // Find Nodes
-  const triggerNode = (wf.nodes as any[]).find((n) => n.type === "triggerNode");
-  const aiNode = (wf.nodes as any[]).find((n) => n.type === "aiNode");
-  const messageNode = (wf.nodes as any[]).find((n) => n.type === "messageNode");
-  const actionNode = (wf.nodes as any[]).find((n) => n.type === "actionNode");
+  const nodes = (wf.nodes as any[]) || [];
+  const edges = (wf.edges as any[]) || [];
 
-  let runId = "test-run";
-  if (!isTestRun) {
+  let runId = resumeState?.runId || "test-run";
+  if (!isTestRun && !resumeState) {
+    const triggerNode = nodes.find(n => n.type === "triggerNode");
+    if (!triggerNode) throw new Error("Workflow has no Trigger Node");
+
     const [run] = await db.insert(workflowRuns).values({
       workflowId,
       containerId: wf.containerId,
@@ -41,441 +82,163 @@ export async function executeWorkflow(workflowId: string, payload: any, isTestRu
     runId = run.id;
   }
 
+  // 1. Initialize Context
+  const context: ExpressionContext = resumeState?.context || {
+    $json: { payload }, // Dynamic payload data
+    $node: {},          // Output data of all executed nodes
+    $env: {
+      containerId: wf.containerId,
+      isTestRun: String(isTestRun),
+    }
+  };
+
+  const executionQueue = resumeState?.queue || [{ nodeId: nodes.find(n => n.type === "triggerNode")?.id! }];
+  let executionCount = 0;
+  let hasFailed = false;
+  let finalError = "";
+
   try {
-    // Stage 1: Trigger Data Ingestion & DB Memory Handling
-    const sessionContext = payload.session || {};
-    const messageBody = payload.message?.body || "No message provided.";
-
-    // 1. Resolve Contact
-    let contactPhone = payload.message?.from || "sandbox_test_phone";
-    let contactName = payload.message?.from_name || "Guest";
-    
-    let contact = await db.query.contacts.findFirst({
-      where: and(
-        eq(contacts.containerId, wf.containerId),
-        eq(contacts.phone, contactPhone)
-      )
-    });
-    
-    if (!contact) {
-      [contact] = await db.insert(contacts).values({
-        containerId: wf.containerId,
-        name: contactName,
-        phone: contactPhone,
-      }).returning();
-    } else if (payload.message?.from_name && contact.name !== payload.message.from_name) {
-      await db.update(contacts).set({ name: payload.message.from_name }).where(eq(contacts.id, contact.id));
-      contact.name = payload.message.from_name;
-    }
-
-    // 2. Resolve Conversation
-    let conversation = await db.query.conversations.findFirst({
-      where: and(
-        eq(conversations.containerId, wf.containerId),
-        eq(conversations.contactId, contact.id)
-      )
-    });
-    
-    if (!conversation) {
-      [conversation] = await db.insert(conversations).values({
-        containerId: wf.containerId,
-        contactId: contact.id,
-        status: "open",
-      }).returning();
-    }
-
-    // 3. Save User Message to DB (only for sandbox test runs)
-    if (isTestRun) {
-      await db.insert(messages).values({
-        conversationId: conversation.id,
-        content: messageBody,
-        isFromContact: true,
-      });
-    }
-
-    // 4. Retrieve Messages from the Last 1 Hour
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const dbMessages = await db.query.messages.findMany({
-      where: and(
-        eq(messages.conversationId, conversation.id),
-        gt(messages.createdAt, oneHourAgo)
-      ),
-      orderBy: (messages, { asc }) => [asc(messages.createdAt)]
-    });
-
-    const historyMessages = dbMessages.slice(0, dbMessages.length - 1);
-    
-    // Stage 2: AI Processor
-    let aiOutput: any = null;
-    let activeOrder: any = null;
-
-    // Check if there is an active order for this contact in the last 15 minutes (under preparation, i.e., not delivered or cancelled)
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-    try {
-      activeOrder = await db.query.orders.findFirst({
-        where: and(
-          eq(orders.containerId, wf.containerId),
-          eq(orders.contactId, contact.id),
-          ne(orders.status, "delivered"),
-          ne(orders.status, "cancelled"),
-          gt(orders.createdAt, fifteenMinutesAgo)
-        ),
-        orderBy: (orders, { desc }) => [desc(orders.createdAt)]
-      });
-      if (activeOrder) {
-        console.log(`[Engine] Found active order under preparation within 15m: ${activeOrder.orderNumber}`);
+    // 2. Main Traversal Loop
+    while (executionQueue.length > 0) {
+      if (executionCount >= MAX_EXECUTION_DEPTH) {
+        throw new Error(`Max execution depth of ${MAX_EXECUTION_DEPTH} reached. Possible infinite loop detected.`);
       }
-    } catch (err: any) {
-      console.error("[Engine] Failed to query active orders:", err.message);
-    }
 
-    if (aiNode) {
-      const modelName = aiNode.data?.llmConfig?.model || "gpt-4o";
-      const temperature = aiNode.data?.llmConfig?.temperature || 0.7;
-      const systemPrompt = aiNode.data?.prompt || "You are a helpful assistant. Extract required entities and provide a conversational reply.";
+      if (executionCount % 50 === 0) {
+        // Yield to event loop to prevent OOM / freezing Node.js
+        await new Promise(r => setImmediate(r));
+      }
       
-      const apiKey = aiNode.data?.llmConfig?.apiKey || process.env.OPENAI_API_KEY;
-      if (!apiKey || apiKey === "dummy") {
-        throw new Error("Missing OpenAI API Key. Please configure it in the AI Node.");
-      }
-      const llm = new ChatOpenAI({
-        modelName: modelName,
-        temperature: temperature,
-        apiKey: apiKey, 
-      });
+      const currentItem = executionQueue.shift();
+      if (!currentItem) continue;
 
-      // We enforce strict JSON output
-      const schema = z.object({
-        ai_processing: z.object({
-          detected_intent: z.string().describe("The primary intent of the user's message"),
-          response_generation: z.object({
-            reply_text: z.string().describe("The conversational response to send back to the user"),
-            requires_human_handoff: z.boolean().describe("Whether this needs human attention"),
+      const node = nodes.find(n => n.id === currentItem.nodeId);
+      if (!node) continue;
+
+      executionCount++;
+      const nodeLabel = node.data?.label || node.type;
+      console.log(`[DAG Engine] Executing Node: ${nodeLabel} (${node.id})`);
+
+      const executor = NODE_REGISTRY[node.type];
+      if (!executor) {
+        throw new Error(`Unsupported node type: ${node.type}`);
+      }
+
+      const outgoingEdges = edges.filter(e => e.source === node.id);
+      
+      const startTime = new Date();
+      let nodeStatus = "success";
+      let nodeError = "";
+      let nodeData = {};
+      let nextEdgesToFollow: string[] = [];
+
+      try {
+        const result = await withTimeout(
+          executor.execute({
+            nodeId: node.id,
+            nodeType: node.type,
+            data: node.data,
+            context,
+            outgoingEdges
           }),
-          extracted_entities: z.object({
-            name: z.string().optional().describe("The customer's name, if provided in conversation"),
-            customer_name: z.string().optional().describe("Alternative field for customer's name"),
-            address: z.string().optional().describe("The delivery address, if provided"),
-            delivery_address: z.string().optional().describe("Alternative field for delivery address"),
-            order_number: z.string().optional().describe("A generated order number or specified order code"),
-            items: z.array(z.object({
-              name: z.string().describe("The item name (e.g. Classic Cheeseburger)"),
-              quantity: z.number().describe("The quantity ordered")
-            })).optional().describe("Array of all items in the order. If the customer adds or removes items from an active order, this array must represent the final updated complete list of items for the order, not just the incremental changes."),
-            total_amount: z.number().optional().describe("Total price of the order in standard currency units (e.g. 15.50 or 1250). If order items are added/removed, this must be updated to the new total amount of all items combined."),
-          }).describe("Extracted entities or fields from user input"),
-        })
-      });
+          DEFAULT_NODE_TIMEOUT_MS,
+          `Node ${nodeLabel} execution timed out after ${DEFAULT_NODE_TIMEOUT_MS}ms`
+        );
 
-      const parser = StructuredOutputParser.fromZodSchema(schema);
-      const formatInstructions = parser.getFormatInstructions();
-
-      const messagesList: any[] = [];
-      
-      // 1. System Prompt + Format Instructions with Name Context & Active Order Context
-      const nameContext = contact.name && contact.name !== "sandbox_test_phone" && contact.name !== "Guest"
-        ? `The customer's name is ${contact.name}. You should address them by their name when appropriate.`
-        : `The customer's name is not specified or verified. Use polite fallback pronouns or address them generally.`;
-        
-      let activeOrderContext = "";
-      if (activeOrder) {
-        const orderItemsStr = Array.isArray(activeOrder.items) 
-          ? (activeOrder.items as any[]).map(item => `${item.quantity || 1}x ${item.name || "item"}`).join(", ")
-          : "";
-        activeOrderContext = `\nActive Order Context:\n- The customer currently has an active order (Order Number: ${activeOrder.orderNumber}) created at ${activeOrder.createdAt?.toLocaleString()} which is under preparation.\n- Current items in this active order: ${orderItemsStr || "None"}\n- Current total amount of this active order: PKR ${(activeOrder.totalAmount || 0) / 100}\n- System Guideline: If the customer requests to add, remove, or modify items for this active order, output the full updated list of all items (cumulative final state) in the 'items' field and update the 'total_amount' accordingly. You must NOT generate a new order number. Use the same order number: ${activeOrder.orderNumber}.`;
-      }
-
-      const systemContent = `Customer Context:
-- ${nameContext}${activeOrderContext}
-- Current Time: ${new Date().toLocaleString()}
-
-System Instructions:
-${systemPrompt}
-
-${formatInstructions}`;
-      messagesList.push(new SystemMessage(systemContent));
-
-      // 2. Chat History
-      for (const msg of historyMessages) {
-        if (msg.isFromContact) {
-          messagesList.push(new HumanMessage(msg.content));
+        if (result.status === "paused") {
+          nodeStatus = "paused";
+          nodeData = result.data || {};
+          nextEdgesToFollow = result.nextEdges || [];
+        } else if (result.status === "failed") {
+          throw new Error(result.error || "Unknown node error");
         } else {
-          messagesList.push(new AIMessage(msg.content));
-        }
-      }
-
-      // 3. Current User Message (appending format instructions to prevent the model from forgetting to output JSON on later turns)
-      const userContentWithInstructions = `${messageBody}\n\n${formatInstructions}`;
-      messagesList.push(new HumanMessage(userContentWithInstructions));
-
-      try {
-        const response = await llm.invoke(messagesList);
-        const rawContent = response.content as string;
-        try {
-          aiOutput = await parser.parse(rawContent);
-        } catch (parseErr) {
-          console.warn("[Engine] JSON parsing failed, trying manual extraction:", parseErr);
-          
-          // Try to extract JSON from raw content if model wrapped it in markdown or similar
-          const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)\s*```/) || rawContent.match(/{[\s\S]*}/);
-          if (jsonMatch) {
-            try {
-              aiOutput = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-            } catch (jsonErr) {
-              console.warn("[Engine] Manual JSON parse failed:", jsonErr);
-            }
+          nodeData = result.data || {};
+          if (result.binary) {
+            if (!context.$binary) context.$binary = {};
+            Object.assign(context.$binary, result.binary);
           }
-          
-          if (!aiOutput || !aiOutput.ai_processing) {
-            const cleanText = rawContent.replace(/```json[\s\S]*?```/g, "").replace(/```[\s\S]*?```/g, "").trim();
-            aiOutput = {
-              ai_processing: {
-                detected_intent: "general",
-                response_generation: { 
-                  reply_text: cleanText || "I'm sorry, I couldn't process that. Can you please rephrase?",
-                  requires_human_handoff: false
-                },
-                extracted_entities: {}
-              }
-            };
-          }
+          nextEdgesToFollow = result.nextEdges || [];
         }
-        console.log("[Engine] AI Output generated:", JSON.stringify(aiOutput, null, 2));
+        
       } catch (err: any) {
-        console.error("[Engine] LLM Error:", err.message);
-        aiOutput = {
-          ai_processing: {
-            detected_intent: "error",
-            response_generation: { 
-              reply_text: "I encountered an error processing your request.",
-              requires_human_handoff: true
-            },
-            extracted_entities: {}
+        nodeStatus = "failed";
+        nodeError = err.message;
+        console.error(`[DAG Engine] Node Failed: ${nodeLabel}`, nodeError);
+
+        // Check for "Continue On Fail"
+        if (!node.data?.continueOnFail) {
+          const errorTrigger = nodes.find(n => n.type === "errorTriggerNode");
+          if (errorTrigger) {
+            console.log(`[DAG Engine] Redirecting error to Error Trigger Node (${errorTrigger.id})`);
+            nodeStatus = "failed";
+            nodeError = err.message;
+            nodeData = { error: nodeError, failedNodeId: node.id, failedNodeLabel: nodeLabel };
+            nextEdgesToFollow = [];
+            executionQueue.push({ nodeId: errorTrigger.id });
+          } else {
+            throw err; // Stop workflow execution
           }
-        };
-      }
-    } else {
-      // Mock AI output if no node found
-      aiOutput = {
-        ai_processing: {
-          response_generation: { reply_text: "Echo: " + messageBody },
-          extracted_entities: {}
+        } else {
+          console.log(`[DAG Engine] Node ${nodeLabel} failed, but Continue On Fail is enabled.`);
+          // If continue on fail is enabled, we still register the node in context so subsequent nodes can see the error
+          nodeData = { error: nodeError };
         }
-      };
-    }
+      }
 
-    // Stage 3 & 4
-    let finalTestResponse = aiOutput.ai_processing.response_generation.reply_text;
+      // 3. Save Node State to Context
+      // This makes it available via {{ $node['NodeName'].json.someField }}
+      context.$node[node.id] = { json: nodeData, binary: context.$binary };
+      context.$node[nodeLabel] = { json: nodeData, binary: context.$binary };
 
-    // Save Bot Response to DB
-    await db.insert(messages).values({
-      conversationId: conversation.id,
-      content: finalTestResponse,
-      isFromContact: false,
-    });
+      // Update $json pointer to point to the output of the most recently executed node
+      context.$json = nodeData;
 
-    // Output & Routing (Send Message Node)
-    if (messageNode && !isTestRun) {
-      console.log(`[Engine] Sending Message to Meta: ${finalTestResponse}`);
-      const container = await db.query.containers.findFirst({
-        where: eq(containers.id, wf.containerId),
-      });
-      if (container?.isConfigured && container.phoneNumberId && container.apiKey) {
-        try {
-          const recipientPhone = contact.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "");
-          const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
-          const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}/messages`;
-          
-          const waRes = await fetch(url, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${container.apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              recipient_type: "individual",
-              to: recipientPhone,
-              type: "text",
-              text: { preview_url: false, body: finalTestResponse },
-            }),
+      // 4. Log Execution to DB
+      if (!isTestRun) {
+        await db.insert(workflowNodeLogs).values({
+          runId,
+          nodeId: node.id,
+          status: nodeStatus,
+          inputData: node.data, // or we can log evaluated config
+          outputData: nodeData,
+          error: nodeError || null,
+          startTime,
+          endTime: new Date()
+        });
+      }
+
+      // 5. Queue Next Nodes or Pause
+      if (nodeStatus === "paused") {
+        const waitMs = (nodeData as any).waitMs || 0;
+        const resumeAt = new Date(Date.now() + waitMs);
+        
+        if (!isTestRun) {
+          await db.insert(workflowPauses).values({
+            runId,
+            workflowId,
+            nodeId: node.id,
+            resumeAt,
+            context,
+            nextEdges: nextEdgesToFollow
           });
-          const waData = await waRes.json();
-          console.log("[Engine] WhatsApp send response:", waRes.status, JSON.stringify(waData).slice(0, 300));
-        } catch (waErr: any) {
-          console.error("[Engine] WhatsApp send failed:", waErr.message);
+          
+          await db.update(workflowRuns).set({
+            status: "paused"
+          }).where(eq(workflowRuns.id, runId));
         }
-      }
-    }
-
-    // Save contact address in customFields if extracted by AI
-    const extracted = aiOutput?.ai_processing?.extracted_entities;
-    if (extracted && (extracted.delivery_address || extracted.address)) {
-      try {
-        const addressVal = extracted.delivery_address || extracted.address;
-        const updatedCustom = { ...(contact.customFields as object || {}), address: addressVal };
-        await db.update(contacts).set({ customFields: updatedCustom }).where(eq(contacts.id, contact.id));
-        contact.customFields = updatedCustom;
-        console.log(`[Engine] Updated contact address: ${addressVal}`);
-      } catch (addrErr: any) {
-        console.error("[Engine] Failed to update contact address:", addrErr.message);
-      }
-    }
-
-    // Save contact name if extracted by AI and currently generic
-    if (extracted && (extracted.name || extracted.customer_name)) {
-      try {
-        const nameVal = extracted.name || extracted.customer_name;
-        if (
-          contact.name === "Guest" || 
-          contact.name === "sandbox_test_phone" || 
-          !contact.name || 
-          contact.name.startsWith("+") || 
-          contact.name.startsWith("0") || 
-          /^[0-9]+$/.test(contact.name.replace(/[^0-9]/g, ""))
-        ) {
-          await db.update(contacts).set({ name: nameVal }).where(eq(contacts.id, contact.id));
-          contact.name = nameVal;
-          console.log(`[Engine] Updated contact name to: ${nameVal}`);
-        }
-      } catch (nameErr: any) {
-        console.error("[Engine] Failed to update contact name:", nameErr.message);
-      }
-    }
-
-    // Operation Node (DB Action)
-    if (actionNode) {
-      const extractedEntities = aiOutput.ai_processing.extracted_entities;
-      console.log(`[Engine] Executing Action with entities:`, extractedEntities);
-      
-      if (actionNode.data?.targetTable === "crm_orders" || actionNode.data?.targetTable === "orders") {
-        try {
-          // Check if we have order number or items to book
-          if (extractedEntities.order_number || extractedEntities.items || extractedEntities.total_amount) {
-            const orderNumber = extractedEntities.order_number || `ORD-${Date.now().toString().slice(-6)}`;
-            
-            let orderItems = extractedEntities.items || [];
-            if (typeof orderItems === "string") {
-              orderItems = [{ name: orderItems, quantity: 1 }];
-            } else if (Array.isArray(orderItems)) {
-              orderItems = orderItems.map((item: any) => {
-                if (typeof item === "string") {
-                  return { name: item, quantity: 1 };
-                }
-                return { name: item.name || "Unknown Item", quantity: item.quantity || 1 };
-              });
-            } else {
-              orderItems = [{ name: orderItems.name || String(orderItems), quantity: orderItems.quantity || 1 }];
-            }
-
-            // Stored in cents, so we multiply standard currency by 100
-            const totalAmount = extractedEntities.total_amount 
-              ? Math.round(Number(extractedEntities.total_amount) * 100) 
-              : 0;
-
-            const container = await db.query.containers.findFirst({
-              where: eq(containers.id, wf.containerId),
-            });
-
-            if (activeOrder) {
-              // Update the previous order
-              await storage.updateOrder(activeOrder.id, {
-                items: orderItems,
-                totalAmount: totalAmount || activeOrder.totalAmount,
-              });
-              console.log(`[Engine] Order ${activeOrder.orderNumber} updated in CRM successfully.`);
-
-              if (container) {
-                // Create database notification for update
-                const notification = await storage.createNotification({
-                  userId: container.ownerId,
-                  containerId: wf.containerId,
-                  title: "Order Updated",
-                  body: `Order ${activeOrder.orderNumber} has been updated by ${contact.name || "Guest"} for a total of PKR ${(totalAmount || activeOrder.totalAmount || 0).toLocaleString()}.`,
-                  type: "order_updated",
-                  isRead: false
-                });
-
-                // Broadcast notification to WebSocket clients
-                dbEvents.emit("broadcast", {
-                  userId: container.ownerId,
-                  data: {
-                    type: "new_notification",
-                    notification
-                  }
-                });
-
-                // Broadcast new order reload to WebSocket clients
-                dbEvents.emit("broadcast", {
-                  userId: container.ownerId,
-                  data: {
-                    type: "new_order",
-                    containerId: wf.containerId
-                  }
-                });
-              }
-            } else {
-              // Create a new order
-              await storage.createOrder({
-                containerId: wf.containerId,
-                contactId: contact.id,
-                orderNumber: orderNumber,
-                items: orderItems,
-                totalAmount: totalAmount,
-                status: "pending"
-              });
-              console.log(`[Engine] Order logged to CRM successfully: ${orderNumber}`);
-
-              if (container) {
-                // Create database notification
-                const notification = await storage.createNotification({
-                  userId: container.ownerId,
-                  containerId: wf.containerId,
-                  title: "New Order Booked",
-                  body: `Order ${orderNumber} has been booked by ${contact.name || "Guest"} for a total of PKR ${totalAmount.toLocaleString()}.`,
-                  type: "order_booked",
-                  isRead: false
-                });
-
-                // Broadcast notification to WebSocket clients
-                dbEvents.emit("broadcast", {
-                  userId: container.ownerId,
-                  data: {
-                    type: "new_notification",
-                    notification
-                  }
-                });
-
-                // Broadcast new order reload to WebSocket clients
-                dbEvents.emit("broadcast", {
-                  userId: container.ownerId,
-                  data: {
-                    type: "new_order",
-                    containerId: wf.containerId
-                  }
-                });
-              }
-            }
+        console.log(`[DAG Engine] Workflow paused at node ${nodeLabel}, resuming at ${resumeAt}`);
+        return { status: "paused", runId };
+      } else if (nodeStatus === "success") {
+        for (const edgeId of nextEdgesToFollow) {
+          const edge = edges.find(e => e.id === edgeId);
+          if (edge) {
+            executionQueue.push({ nodeId: edge.target });
           }
-        } catch (err: any) {
-          console.error("[Engine] Failed to write order to database:", err.message);
         }
       }
     }
 
-    const updatedDbMessages = await db.query.messages.findMany({
-      where: and(
-        eq(messages.conversationId, conversation.id),
-        gt(messages.createdAt, oneHourAgo)
-      ),
-      orderBy: (messages, { asc }) => [asc(messages.createdAt)]
-    });
-
-    const finalHistory = updatedDbMessages.map(msg => ({
-      role: msg.isFromContact ? "user" : "bot",
-      content: msg.content
-    }));
-
+    // Workflow completed successfully
     if (!isTestRun) {
       await db.update(workflowRuns).set({
         status: "completed",
@@ -483,16 +246,68 @@ ${formatInstructions}`;
       }).where(eq(workflowRuns.id, runId));
     }
 
-    return { runId, testOutput: finalTestResponse, history: finalHistory };
+    const testOutputText = context.$node["Message"]?.json?.sentText || JSON.stringify(context.$json);
+    return { 
+      status: "success", 
+      runId, 
+      testOutput: testOutputText,
+      history: context.$node["Message"]?.json?.sentText ? [{ role: "bot", content: context.$node["Message"].json.sentText }] : []
+    };
 
-  } catch (error: any) {
+  } catch (globalError: any) {
+    console.error(`[DAG Engine] Workflow Failed:`, globalError.message);
+    
     if (!isTestRun) {
       await db.update(workflowRuns).set({
         status: "failed",
-        error: error.message,
+        error: globalError.message,
         endTime: new Date(),
       }).where(eq(workflowRuns.id, runId));
     }
-    throw error;
+    
+    throw globalError;
+  }
+}
+
+export async function resumePausedWorkflows() {
+  const now = new Date();
+  
+  const pausesToResume = await db.query.workflowPauses.findMany({
+    where: and(
+      lte(workflowPauses.resumeAt, now),
+      eq(workflowPauses.status, "pending")
+    )
+  });
+
+  if (pausesToResume.length === 0) return;
+  console.log(`[DAG Engine] Found ${pausesToResume.length} paused workflows to resume.`);
+
+  for (const pause of pausesToResume) {
+    try {
+      await db.update(workflowPauses)
+        .set({ status: "resumed" })
+        .where(eq(workflowPauses.id, pause.id));
+        
+      await db.update(workflowRuns).set({ status: "running" }).where(eq(workflowRuns.id, pause.runId));
+
+      const queue = (pause.nextEdges as string[]).map(edgeId => edgeId);
+      
+      const wf = await db.query.workflows.findFirst({ where: eq(workflows.id, pause.workflowId) });
+      const edges = (wf?.edges as any[]) || [];
+      const executionQueue = queue.map(edgeId => {
+        const edge = edges.find(e => e.id === edgeId);
+        return edge ? { nodeId: edge.target } : null;
+      }).filter(Boolean) as { nodeId: string }[];
+
+      // Resume execution in background
+      executeWorkflow(pause.workflowId, null, false, {
+        runId: pause.runId,
+        context: pause.context as ExpressionContext,
+        queue: executionQueue
+      }).catch(err => console.error("[DAG Engine Resume Error]", err));
+
+    } catch (err) {
+      console.error(`[DAG Engine] Failed to resume pause ${pause.id}`, err);
+    }
   }
 }

@@ -5,10 +5,14 @@ import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
-import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs } from "@shared/schema";
+import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs, knowledgeBases, knowledgeDocuments } from "@shared/schema";
 import { db, dbEvents } from "./db";
 import { eq, and, sql, gt } from "drizzle-orm";
 import { executeWorkflow } from "./automation-engine";
+import multer from "multer";
+import { processDocument } from "./knowledge-engine";
+
+const upload = multer({ storage: multer.memoryStorage() });
 // Mock requireAuth if not provided
 const requireAuth = (req: any, res: any, next: any) => next();
 
@@ -1273,6 +1277,74 @@ export async function registerRoutes(
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // ==============================================================================
+  // KNOWLEDGE BASE (RAG)
+  // ==============================================================================
+
+  app.get("/api/containers/:containerId/knowledge-bases", isAuthenticated, async (req: any, res) => {
+    try {
+      const bases = await db.query.knowledgeBases.findMany({
+        where: eq(knowledgeBases.containerId, req.params.containerId),
+        orderBy: (kb, { desc }) => [desc(kb.createdAt)]
+      });
+      res.json(bases);
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.post("/api/containers/:containerId/knowledge-bases", isAuthenticated, async (req: any, res) => {
+    try {
+      const [kb] = await db.insert(knowledgeBases).values({
+        containerId: req.params.containerId,
+        name: req.body.name,
+        description: req.body.description,
+      }).returning();
+      res.json(kb);
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.delete("/api/knowledge-bases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await db.delete(knowledgeBases).where(eq(knowledgeBases.id, req.params.id));
+      res.json({ success: true });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/knowledge-bases/:baseId/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const docs = await db.query.knowledgeDocuments.findMany({
+        where: eq(knowledgeDocuments.baseId, req.params.baseId),
+        orderBy: (doc, { desc }) => [desc(doc.createdAt)]
+      });
+      res.json(docs);
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.post("/api/knowledge-bases/:baseId/documents/upload", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+      const [doc] = await db.insert(knowledgeDocuments).values({
+        baseId: req.params.baseId,
+        filename: file.originalname,
+        status: "processing",
+      }).returning();
+
+      res.json(doc);
+
+      // Process in background
+      processDocument(doc.id, file.buffer, file.mimetype).catch(err => console.error("Process Document Error:", err));
+      
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.delete("/api/knowledge-documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.id, req.params.id));
+      res.json({ success: true });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
   app.post("/api/workflows/:id/test", async (req, res) => {

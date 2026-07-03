@@ -1,7 +1,16 @@
 export * from "./models/auth";
 
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum, uuid, customType } from "drizzle-orm/pg-core";
+
+const vector1536 = customType<{ data: number[], driverData: string }>({
+  dataType() {
+    return 'vector(1536)';
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+});
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
@@ -155,6 +164,18 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const workflowPauses = pgTable("workflow_pauses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runId: varchar("run_id").notNull(),
+  workflowId: varchar("workflow_id").notNull().references(() => workflows.id),
+  nodeId: text("node_id").notNull(),
+  resumeAt: timestamp("resume_at").notNull(),
+  context: jsonb("context").notNull(), // Saves ExpressionContext
+  nextEdges: jsonb("next_edges").notNull(), // Saves string[]
+  status: text("status").default("pending"), // pending, resumed, failed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   ownedContainers: many(containers),
@@ -226,6 +247,10 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   container: one(containers, { fields: [notifications.containerId], references: [containers.id] }),
 }));
 
+export const workflowPausesRelations = relations(workflowPauses, ({ one }) => ({
+  workflow: one(workflows, { fields: [workflowPauses.workflowId], references: [workflows.id] }),
+}));
+
 // Insert schemas
 export const insertContainerSchema = createInsertSchema(containers).omit({ id: true, createdAt: true });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, createdAt: true });
@@ -263,6 +288,27 @@ export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type ContainerMember = typeof containerMembers.$inferSelect;
 export type InsertContainerMember = z.infer<typeof insertContainerMemberSchema>;
 
+export const credentials = pgTable("credentials", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 100 }).notNull(), // e.g. "postgres", "http_api"
+  encryptedData: text("encrypted_data").notNull(),
+  iv: text("iv").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const credentialsRelations = relations(credentials, ({ one }) => ({
+  container: one(containers, {
+    fields: [credentials.containerId],
+    references: [containers.id],
+  }),
+}));
+
+export const insertCredentialSchema = createInsertSchema(credentials).omit({ id: true, createdAt: true });
+export type Credential = typeof credentials.$inferSelect;
+export type InsertCredential = z.infer<typeof insertCredentialSchema>;
+
 export const workflows = pgTable("workflows", {
   id: uuid("id").primaryKey().defaultRandom(),
   containerId: uuid("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
@@ -286,6 +332,31 @@ export const workflowRuns = pgTable("workflow_runs", {
   error: text("error_message"),
   startTime: timestamp("started_at").defaultNow().notNull(),
   endTime: timestamp("completed_at"),
+});
+
+export const knowledgeBases = pgTable("knowledge_bases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  containerId: varchar("container_id").notNull().references(() => containers.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const knowledgeDocuments = pgTable("knowledge_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  baseId: uuid("base_id").notNull().references(() => knowledgeBases.id, { onDelete: "cascade" }),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  status: varchar("status", { length: 50 }).default("processing"), // processing, ready, failed
+  contentUrl: text("content_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const knowledgeChunks = pgTable("knowledge_chunks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  documentId: uuid("document_id").notNull().references(() => knowledgeDocuments.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata").default({}),
+  embedding: vector1536("embedding"),
 });
 
 export const workflowNodeLogs = pgTable("workflow_node_logs", {
@@ -329,3 +400,33 @@ export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type InsertWorkflowRun = typeof workflowRuns.$inferInsert;
 export type WorkflowNodeLog = typeof workflowNodeLogs.$inferSelect;
 export type InsertWorkflowNodeLog = typeof workflowNodeLogs.$inferInsert;
+
+export const knowledgeBasesRelations = relations(knowledgeBases, ({ one, many }) => ({
+  container: one(containers, {
+    fields: [knowledgeBases.containerId],
+    references: [containers.id],
+  }),
+  documents: many(knowledgeDocuments),
+}));
+
+export const knowledgeDocumentsRelations = relations(knowledgeDocuments, ({ one, many }) => ({
+  base: one(knowledgeBases, {
+    fields: [knowledgeDocuments.baseId],
+    references: [knowledgeBases.id],
+  }),
+  chunks: many(knowledgeChunks),
+}));
+
+export const knowledgeChunksRelations = relations(knowledgeChunks, ({ one }) => ({
+  document: one(knowledgeDocuments, {
+    fields: [knowledgeChunks.documentId],
+    references: [knowledgeDocuments.id],
+  }),
+}));
+
+export type KnowledgeBase = typeof knowledgeBases.$inferSelect;
+export type InsertKnowledgeBase = typeof knowledgeBases.$inferInsert;
+export type KnowledgeDocument = typeof knowledgeDocuments.$inferSelect;
+export type InsertKnowledgeDocument = typeof knowledgeDocuments.$inferInsert;
+export type KnowledgeChunk = typeof knowledgeChunks.$inferSelect;
+export type InsertKnowledgeChunk = typeof knowledgeChunks.$inferInsert;

@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { resumePausedWorkflows } from "./automation-engine";
 
 const app = express();
 const httpServer = createServer(app);
@@ -106,6 +107,14 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      
+      // Start Background Worker for Paused Workflows
+      setInterval(() => {
+        resumePausedWorkflows().catch(err => {
+          console.error("[Background Worker Error]", err);
+        });
+      }, 60 * 1000); // Check every 1 minute
+      log("Background Worker for workflow_pauses started.");
     },
   );
 })();

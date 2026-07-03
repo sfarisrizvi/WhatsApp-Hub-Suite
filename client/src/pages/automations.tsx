@@ -1,45 +1,22 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { 
-  ReactFlow, 
-  Background, 
-  Controls, 
-  MiniMap, 
-  useNodesState, 
-  useEdgesState,
-  addEdge,
-  Connection,
-  Edge,
-  Node,
-  Handle,
-  Position,
-  Panel
+  ReactFlow, Background, Controls, MiniMap, 
+  useNodesState, useEdgesState, addEdge, Connection, Edge, Node, Handle, Position
 } from "@xyflow/react";
 import '@xyflow/react/dist/style.css';
 import { 
-  Zap, 
-  BrainCircuit, 
-  MessageCircle, 
-  Database,
-  Play,
-  Settings2,
-  X,
-  MessageSquare,
-  ArrowRight,
-  Save,
-  Trash,
-  RotateCcw
+  Zap, BrainCircuit, MessageCircle, Database, Settings2, X, MessageSquare, ArrowRight, Save, Trash, RotateCcw, 
+  Globe, SplitSquareHorizontal, Waypoints, Play,
+  Code, Repeat, Hourglass, Wrench, AlertTriangle, Shield, FileArchive, FileCode2
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRoute } from "wouter";
 import { useContainer } from "@/lib/container-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -66,44 +43,178 @@ const GlassNode = ({ icon: Icon, title, subtitle, colorClass, data, selected }: 
         {data.label}
       </div>
     )}
+    {data?.continueOnFail && (
+      <div className="absolute top-2 right-2 flex items-center">
+        <Badge variant="outline" className="text-[9px] border-amber-200 text-amber-600 bg-amber-50">Continue on Fail</Badge>
+      </div>
+    )}
   </div>
 );
 
+// Triggers
 export const TriggerNode = ({ data, selected }: any) => (
+  <><GlassNode icon={Zap} title="Trigger Event" subtitle="Entry Point" colorClass="bg-amber-500" data={data} selected={selected} /><Handle type="source" position={Position.Right} className="w-3 h-3 bg-amber-500" /></>
+);
+
+// Logic
+export const IfNode = ({ data, selected }: any) => (
   <>
-    <GlassNode icon={Zap} title="Trigger Event" subtitle="The Listener" colorClass="bg-amber-500" data={data} selected={selected} />
-    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-amber-500 border-2 border-white" />
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500" />
+    <GlassNode icon={SplitSquareHorizontal} title="If Condition" subtitle="Logic" colorClass="bg-blue-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} id="true" style={{ top: '30%' }} className="w-3 h-3 bg-emerald-500" />
+    <Handle type="source" position={Position.Right} id="false" style={{ top: '70%' }} className="w-3 h-3 bg-rose-500" />
   </>
 );
 
+export const SwitchNode = ({ data, selected }: any) => {
+  const rules = data?.rules || [];
+  return (
+    <>
+      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500" />
+      <GlassNode icon={Waypoints} title="Switch" subtitle="Logic" colorClass="bg-blue-500" data={data} selected={selected} />
+      {rules.map((rule: any, i: number) => (
+        <Handle key={i} type="source" position={Position.Right} id={rule.handleName || `case_${i}`} style={{ top: `${(i+1)*20}%` }} className="w-3 h-3 bg-blue-500" />
+      ))}
+      <Handle type="source" position={Position.Right} id="default" style={{ top: '90%' }} className="w-3 h-3 bg-slate-500" />
+    </>
+  );
+};
+
+export const ErrorNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-red-600" />
+    <GlassNode icon={AlertTriangle} title="Error Catcher" subtitle="Logic" colorClass="bg-red-600" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} id="success" style={{ top: '30%' }} className="w-3 h-3 bg-emerald-500" />
+    <Handle type="source" position={Position.Right} id="error" style={{ top: '70%' }} className="w-3 h-3 bg-red-600" />
+  </>
+);
+
+// Data & Transformations
+export const CodeNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-slate-800" />
+    <GlassNode icon={Code} title="Code Sandbox" subtitle="Data & Logic" colorClass="bg-slate-800" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-slate-800" />
+  </>
+);
+
+export const LoopNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-pink-500" />
+    <GlassNode icon={Repeat} title="Loop Array" subtitle="Data & Logic" colorClass="bg-pink-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} id="item" style={{ top: '30%' }} className="w-3 h-3 bg-pink-500" />
+    <Handle type="source" position={Position.Right} id="done" style={{ top: '70%' }} className="w-3 h-3 bg-slate-400" />
+  </>
+);
+
+export const WaitNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-cyan-500" />
+    <GlassNode icon={Hourglass} title="Wait" subtitle="Data & Logic" colorClass="bg-cyan-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-cyan-500" />
+  </>
+);
+
+export const SetNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-orange-500" />
+    <GlassNode icon={Wrench} title="Set Fields" subtitle="Data & Logic" colorClass="bg-orange-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-orange-500" />
+  </>
+);
+
+
+// Integrations
+export const HttpNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-purple-500" />
+    <GlassNode icon={Globe} title="HTTP Request" subtitle="Integration" colorClass="bg-purple-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-purple-500" />
+  </>
+);
+
+export const DatabaseNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-rose-500" />
+    <GlassNode icon={Database} title="Database" subtitle="Integration" colorClass="bg-rose-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-rose-500" />
+  </>
+);
+
+// Legacy/Specific
 export const AiNode = ({ data, selected }: any) => (
   <>
-    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-indigo-500 border-2 border-white" />
-    <GlassNode icon={BrainCircuit} title="Cognitive Agent" subtitle="The Processor" colorClass="bg-indigo-500" data={data} selected={selected} />
-    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-indigo-500 border-2 border-white" />
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-indigo-500" />
+    <GlassNode icon={BrainCircuit} title="Cognitive Agent" subtitle="AI" colorClass="bg-indigo-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-indigo-500" />
   </>
 );
 
 export const MessageNode = ({ data, selected }: any) => (
   <>
-    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-emerald-500 border-2 border-white" />
-    <GlassNode icon={MessageCircle} title="Send Message" subtitle="The Messenger" colorClass="bg-emerald-500" data={data} selected={selected} />
-    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-emerald-500 border-2 border-white" />
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-emerald-500" />
+    <GlassNode icon={MessageCircle} title="Send Message" subtitle="Communication" colorClass="bg-emerald-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-emerald-500" />
   </>
 );
 
 export const ActionNode = ({ data, selected }: any) => (
   <>
-    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-rose-500 border-2 border-white" />
-    <GlassNode icon={Database} title="Database Action" subtitle="The Executor" colorClass="bg-rose-500" data={data} selected={selected} />
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-rose-500" />
+    <GlassNode icon={Database} title="DB Action (Legacy)" subtitle="The Executor" colorClass="bg-rose-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-rose-500" />
+  </>
+);
+
+export const CryptoNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-zinc-500" />
+    <GlassNode icon={Shield} title="Cryptography" subtitle="Utility" colorClass="bg-zinc-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-zinc-500" />
+  </>
+);
+
+export const CompressNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-zinc-500" />
+    <GlassNode icon={FileArchive} title="Archive (Zip)" subtitle="Utility" colorClass="bg-zinc-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-zinc-500" />
+  </>
+);
+
+export const FormatNode = ({ data, selected }: any) => (
+  <>
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-zinc-500" />
+    <GlassNode icon={FileCode2} title="Format Data" subtitle="Utility" colorClass="bg-zinc-500" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-zinc-500" />
+  </>
+);
+
+export const ErrorTriggerNode = ({ data, selected }: any) => (
+  <>
+    <GlassNode icon={AlertTriangle} title="Error Trigger" subtitle="Trigger" colorClass="bg-red-600" data={data} selected={selected} />
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-red-600" />
   </>
 );
 
 const nodeTypes = {
   triggerNode: TriggerNode,
+  ifNode: IfNode,
+  switchNode: SwitchNode,
+  errorNode: ErrorNode,
+  codeNode: CodeNode,
+  loopNode: LoopNode,
+  waitNode: WaitNode,
+  setNode: SetNode,
+  httpNode: HttpNode,
+  databaseNode: DatabaseNode,
   aiNode: AiNode,
   messageNode: MessageNode,
   actionNode: ActionNode,
+  cryptoNode: CryptoNode,
+  compressNode: CompressNode,
+  formatNode: FormatNode,
+  errorTriggerNode: ErrorTriggerNode,
 };
 
 // ============================================================================
@@ -127,8 +238,14 @@ export default function Automations() {
   const [chatHistory, setChatHistory] = useState<{role: "user"|"bot", content: string}[]>([]);
   const [testInput, setTestInput] = useState("");
   const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null); // For single node test
 
-  const { data: workflows, isLoading } = useQuery({
+  const { data: knowledgeBases = [] } = useQuery<any[]>({
+    queryKey: ["/api/containers", containerId, "knowledge-bases"],
+    enabled: !!containerId,
+  });
+
+  const { data: workflows } = useQuery({
     queryKey: ['workflows', containerId],
     queryFn: async () => {
       if (!containerId) return [];
@@ -142,77 +259,40 @@ export default function Automations() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = { name: workflowName, nodes, edges };
-      const url = workflowId 
-        ? `/api/workflows/${workflowId}` 
-        : `/api/containers/${containerId}/workflows`;
-      const method = workflowId ? "PATCH" : "POST";
-      
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      const url = workflowId ? `/api/workflows/${workflowId}` : `/api/containers/${containerId}/workflows`;
+      const res = await fetch(url, { method: workflowId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error("Failed to save workflow");
       return res.json();
     },
     onSuccess: (data) => {
       setWorkflowId(data.id);
-      toast({ title: "Workflow Saved", description: "Your automation has been saved successfully." });
+      toast({ title: "Saved", description: "Workflow saved successfully." });
       queryClient.invalidateQueries({ queryKey: ['workflows', containerId] });
     }
   });
 
   const testMutation = useMutation({
-    mutationFn: async ({ text, history }: { text: string; history: { role: "user" | "bot"; content: string }[] }) => {
-      if (!workflowId) throw new Error("Please save the workflow first.");
+    mutationFn: async ({ text, history }: any) => {
+      if (!workflowId) throw new Error("Save workflow first.");
       const res = await fetch(`/api/workflows/${workflowId}/test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: { body: text, from_name: "Local Tester" },
-          session: { thread_id: "local_test_123" },
-          history: history
-        })
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: { body: text, from_name: "Local Tester" }, session: {}, history })
       });
       if (!res.ok) throw new Error("Test execution failed");
       return res.json();
     },
-    onMutate: (variables) => {
-      setIsTesting(true);
-      setChatHistory(prev => [...prev, { role: "user", content: variables.text }]);
-      setTestInput("");
-    },
+    onMutate: (vars) => { setIsTesting(true); setChatHistory(prev => [...prev, { role: "user", content: vars.text }]); setTestInput(""); },
     onSuccess: (data) => {
-      if (data.history) {
-        setChatHistory(data.history);
-      } else {
-        setChatHistory(prev => [...prev, { role: "bot", content: data.response || "Workflow completed without returning text." }]);
-      }
+      if (data.history) setChatHistory(data.history);
       setIsTesting(false);
     },
-    onError: (err: any) => {
-      setChatHistory(prev => [...prev, { role: "bot", content: `Error: ${err.message}` }]);
-      setIsTesting(false);
-    }
+    onError: (err: any) => { setChatHistory(prev => [...prev, { role: "bot", content: `Error: ${err.message}` }]); setIsTesting(false); }
   });
 
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      if (!workflowId) return;
-      const res = await fetch(`/api/workflows/${workflowId}/reset-test`, {
-        method: "POST"
-      });
-      if (!res.ok) throw new Error("Failed to reset sandbox chat");
-      return res.json();
-    },
-    onSuccess: () => {
-      setChatHistory([]);
-      toast({ title: "Sandbox Chat Reset", description: "Chat history has been cleared." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Reset Failed", description: err.message, variant: "destructive" });
-    }
-  });
+  // Single Node Test Placeholder
+  const testSingleNode = async () => {
+    toast({ title: "Node Execution", description: "This will run the executor for this node in isolation (UI feature coming soon)." });
+  };
 
   const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#10b981', strokeWidth: 2 } }, eds)), [setEdges]);
 
@@ -220,48 +300,9 @@ export default function Automations() {
     setSelectedNode(nodes.length > 0 ? nodes[0] : null);
   }, []);
 
-  useEffect(() => {
-    if (workflowId) {
-      fetch(`/api/workflows/${workflowId}/test-history`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.history) setChatHistory(data.history);
-        })
-        .catch((err) => console.error("Failed to load test history", err));
-    }
-  }, [workflowId]);
-
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    // In a real app, this would upload to S3/Supabase Storage.
-    // For now, we'll store the file name to show it's saved.
-    updateNodeData("fileName", file.name);
-    
-    if (file.type === "text/csv" || file.type === "text/plain") {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        const currentPrompt = (selectedNode?.data as any)?.prompt || "";
-        updateNodeData("prompt", currentPrompt + "\n\n--- Document Context ---\n" + text);
-        toast({ title: "Document text added to knowledge base!" });
-      };
-      reader.readAsText(file);
-    } else {
-      toast({ title: "File uploaded successfully!" });
-    }
-  };
-
   const updateNodeData = (key: string, value: any) => {
     if (!selectedNode) return;
-    setNodes(nds => nds.map(n => {
-      if (n.id === selectedNode.id) {
-        return { ...n, data: { ...n.data, [key]: value } };
-      }
-      return n;
-    }));
+    setNodes(nds => nds.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, [key]: value } } : n));
     setSelectedNode(prev => prev ? { ...prev, data: { ...prev.data, [key]: value } } : null);
   };
 
@@ -279,67 +320,23 @@ export default function Automations() {
       const reactFlowBounds = document.querySelector('.react-flow')?.getBoundingClientRect();
       if (!reactFlowBounds) return;
 
-      const position = {
-        x: e.clientX - reactFlowBounds.left,
-        y: e.clientY - reactFlowBounds.top,
-      };
-
-      const newNode: Node = {
-        id: `node_${Date.now()}`,
-        type,
-        position,
-        data: { label: `New ${type.replace('Node', '')}` },
-      };
-
+      const position = { x: e.clientX - reactFlowBounds.left, y: e.clientY - reactFlowBounds.top };
+      const newNode: Node = { id: `node_${Date.now()}`, type, position, data: { label: `New ${type.replace('Node', '')}` } };
       setNodes((nds) => nds.concat(newNode));
     },
     [setNodes]
   );
 
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
+  const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
 
-  // Load existing workflow or initialize default template
-  React.useEffect(() => {
-    const defaultNodes = [
-      { id: "node_trigger", type: "triggerNode", position: { x: 50, y: 200 }, data: { label: "WhatsApp Listener", isLive: false } },
-      { id: "node_ai", type: "aiNode", position: { x: 400, y: 200 }, data: { label: "CRM Assistant", llmConfig: { model: "gpt-4o", temperature: 0.7, apiKey: "" }, prompt: "" } },
-      { id: "node_message", type: "messageNode", position: { x: 800, y: 100 }, data: { label: "Send Reply" } },
-      { id: "node_action", type: "actionNode", position: { x: 800, y: 300 }, data: { label: "Log to CRM", targetTable: "crm_orders" } }
-    ];
-    const defaultEdges = [
-      { id: "edge_1", source: "node_trigger", target: "node_ai", animated: true, style: { stroke: '#10b981', strokeWidth: 2 } },
-      { id: "edge_2", source: "node_ai", target: "node_message", animated: true, style: { stroke: '#10b981', strokeWidth: 2 } },
-      { id: "edge_3", source: "node_ai", target: "node_action", animated: true, style: { stroke: '#10b981', strokeWidth: 2 } }
-    ];
-
-    if (workflows) {
-      if (workflows.length > 0) {
-        const wf = workflows[0];
-        if (!workflowId) {
-          setWorkflowId(wf.id);
-          setWorkflowName(wf.name);
-        }
-        
-        // Populate if empty
-        if (!wf.nodes || wf.nodes.length === 0) {
-          console.log("Existing workflow is empty, populating defaults.");
-          setNodes(defaultNodes as Node[]);
-          setEdges(defaultEdges as Edge[]);
-        } else if (!workflowId) {
-          console.log("Loading existing workflow nodes.");
-          setNodes(wf.nodes);
-          setEdges(wf.edges);
-        }
-      } else {
-        // No workflows exist
-        console.log("No workflows found, populating defaults.");
-        if (nodes.length === 0) {
-          setNodes(defaultNodes as Node[]);
-          setEdges(defaultEdges as Edge[]);
-        }
+  useEffect(() => {
+    if (workflows && workflows.length > 0) {
+      const wf = workflows[0];
+      if (!workflowId) {
+        setWorkflowId(wf.id);
+        setWorkflowName(wf.name);
+        setNodes(wf.nodes || []);
+        setEdges(wf.edges || []);
       }
     }
   }, [workflows]);
@@ -347,277 +344,555 @@ export default function Automations() {
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#fafafa]">
       
-      {/* LEFT NODE PALETTE */}
+      {/* LEFT PALETTE */}
       <div className="w-64 bg-white border-r shadow-sm flex flex-col z-10 shrink-0">
         <div className="p-4 border-b">
-          <h2 className="font-semibold text-lg flex items-center gap-2">
-            <BrainCircuit className="w-5 h-5 text-indigo-500" />
-            Components
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">Drag nodes onto the canvas.</p>
+          <h2 className="font-semibold text-lg flex items-center gap-2"><Waypoints className="w-5 h-5 text-indigo-500" /> Components</h2>
         </div>
-        <div className="p-4 flex flex-col gap-3">
-          <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 cursor-grab hover:shadow-md transition-shadow flex items-center gap-3" draggable onDragStart={(e) => handleDragStart(e, 'triggerNode')}>
-            <Zap className="w-5 h-5 text-amber-500" />
-            <span className="text-sm font-medium">Trigger</span>
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-3 tracking-wider">Triggers</h3>
+              <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'triggerNode')}>
+                <Zap className="w-5 h-5 text-amber-500" /> <span className="text-sm font-medium">Webhook / Trigger</span>
+              </div>
+              <div className="border border-red-200 bg-red-50 rounded-lg p-3 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'errorTriggerNode')}>
+                <AlertTriangle className="w-5 h-5 text-red-500" /> <span className="text-sm font-medium">Error Trigger</span>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-3 tracking-wider">Data & Logic</h3>
+              <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'ifNode')}>
+                <SplitSquareHorizontal className="w-5 h-5 text-blue-500" /> <span className="text-sm font-medium">If Condition</span>
+              </div>
+              <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'switchNode')}>
+                <Waypoints className="w-5 h-5 text-blue-500" /> <span className="text-sm font-medium">Switch</span>
+              </div>
+              <div className="border border-pink-200 bg-pink-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'loopNode')}>
+                <Repeat className="w-5 h-5 text-pink-500" /> <span className="text-sm font-medium">Loop Array</span>
+              </div>
+              <div className="border border-slate-200 bg-slate-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'codeNode')}>
+                <Code className="w-5 h-5 text-slate-800" /> <span className="text-sm font-medium">Code Sandbox</span>
+              </div>
+              <div className="border border-cyan-200 bg-cyan-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'waitNode')}>
+                <Hourglass className="w-5 h-5 text-cyan-500" /> <span className="text-sm font-medium">Wait Delay</span>
+              </div>
+              <div className="border border-orange-200 bg-orange-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'setNode')}>
+                <Wrench className="w-5 h-5 text-orange-500" /> <span className="text-sm font-medium">Set Fields</span>
+              </div>
+              <div className="border border-red-200 bg-red-50 rounded-lg p-3 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'errorNode')}>
+                <AlertTriangle className="w-5 h-5 text-red-600" /> <span className="text-sm font-medium">Error Catcher</span>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-3 tracking-wider">Integrations</h3>
+              <div className="border border-purple-200 bg-purple-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'httpNode')}>
+                <Globe className="w-5 h-5 text-purple-500" /> <span className="text-sm font-medium">HTTP Request</span>
+              </div>
+              <div className="border border-rose-200 bg-rose-50 rounded-lg p-3 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'databaseNode')}>
+                <Database className="w-5 h-5 text-rose-500" /> <span className="text-sm font-medium">Database (SQL)</span>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-3 tracking-wider mt-4">AI & Messaging</h3>
+              <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'aiNode')}>
+                <BrainCircuit className="w-5 h-5 text-indigo-500" /> <span className="text-sm font-medium">Cognitive AI</span>
+              </div>
+              <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'messageNode')}>
+                <MessageCircle className="w-5 h-5 text-emerald-500" /> <span className="text-sm font-medium">Send Message</span>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-3 tracking-wider mt-4">Files & Utilities</h3>
+              <div className="border border-zinc-200 bg-zinc-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'cryptoNode')}>
+                <Shield className="w-5 h-5 text-zinc-500" /> <span className="text-sm font-medium">Cryptography</span>
+              </div>
+              <div className="border border-zinc-200 bg-zinc-50 rounded-lg p-3 mb-2 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'compressNode')}>
+                <FileArchive className="w-5 h-5 text-zinc-500" /> <span className="text-sm font-medium">Archive (Zip)</span>
+              </div>
+              <div className="border border-zinc-200 bg-zinc-50 rounded-lg p-3 cursor-grab hover:shadow-md flex gap-3" draggable onDragStart={(e) => handleDragStart(e, 'formatNode')}>
+                <FileCode2 className="w-5 h-5 text-zinc-500" /> <span className="text-sm font-medium">Format Data</span>
+              </div>
+            </div>
           </div>
-          <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-3 cursor-grab hover:shadow-md transition-shadow flex items-center gap-3" draggable onDragStart={(e) => handleDragStart(e, 'aiNode')}>
-            <BrainCircuit className="w-5 h-5 text-indigo-500" />
-            <span className="text-sm font-medium">Cognitive AI</span>
-          </div>
-          <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 cursor-grab hover:shadow-md transition-shadow flex items-center gap-3" draggable onDragStart={(e) => handleDragStart(e, 'messageNode')}>
-            <MessageCircle className="w-5 h-5 text-emerald-500" />
-            <span className="text-sm font-medium">Send Message</span>
-          </div>
-          <div className="border border-rose-200 bg-rose-50 rounded-lg p-3 cursor-grab hover:shadow-md transition-shadow flex items-center gap-3" draggable onDragStart={(e) => handleDragStart(e, 'actionNode')}>
-            <Database className="w-5 h-5 text-rose-500" />
-            <span className="text-sm font-medium">DB Action</span>
-          </div>
-        </div>
+        </ScrollArea>
       </div>
 
-      {/* MIDDLE CANVAS */}
+      {/* CANVAS */}
       <div className="flex-1 flex flex-col relative">
         <div className="absolute top-4 left-4 z-10 flex gap-2">
-          <Input 
-            value={workflowName} 
-            onChange={(e) => setWorkflowName(e.target.value)} 
-            className="w-64 bg-white/80 backdrop-blur shadow-sm border-0 ring-1 ring-black/5 font-semibold"
-          />
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="shadow-sm">
-            <Save className="w-4 h-4 mr-2" /> {saveMutation.isPending ? "Saving..." : "Save Workflow"}
-          </Button>
-          <Button variant="outline" onClick={() => {
-            setNodes([
-              { id: "node_trigger", type: "triggerNode", position: { x: 50, y: 200 }, data: { label: "WhatsApp Listener", isLive: false } },
-              { id: "node_ai", type: "aiNode", position: { x: 400, y: 200 }, data: { label: "CRM Assistant", llmConfig: { model: "gpt-4o", temperature: 0.7, apiKey: "" }, prompt: "" } },
-              { id: "node_message", type: "messageNode", position: { x: 800, y: 100 }, data: { label: "Send Reply" } },
-              { id: "node_action", type: "actionNode", position: { x: 800, y: 300 }, data: { label: "Log to CRM", targetTable: "crm_orders" } }
-            ] as Node[]);
-            setEdges([
-              { id: "edge_1", source: "node_trigger", target: "node_ai", animated: true, style: { stroke: '#10b981', strokeWidth: 2 } },
-              { id: "edge_2", source: "node_ai", target: "node_message", animated: true, style: { stroke: '#10b981', strokeWidth: 2 } },
-              { id: "edge_3", source: "node_ai", target: "node_action", animated: true, style: { stroke: '#10b981', strokeWidth: 2 } }
-            ] as Edge[]);
-          }} className="shadow-sm bg-white">
-            Reset to Default
-          </Button>
+          <Input value={workflowName} onChange={(e) => setWorkflowName(e.target.value)} className="w-64 bg-white/80 font-semibold" />
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}><Save className="w-4 h-4 mr-2" /> Save</Button>
         </div>
-
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          onSelectionChange={onSelectionChange}
-          nodeTypes={nodeTypes}
-          fitView
-          className="flex-1"
-        >
+        <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver} onSelectionChange={onSelectionChange} nodeTypes={nodeTypes} fitView className="flex-1">
           <Background color="#ccc" gap={16} />
-          <Controls className="bg-white shadow-md border-0 rounded-lg overflow-hidden" />
+          <Controls className="bg-white shadow-md border-0 rounded-lg" />
           <MiniMap className="rounded-lg shadow-md border-0" />
         </ReactFlow>
 
-        {/* LOCAL CHAT WIDGET */}
-        <div className="absolute bottom-4 left-4 z-10 w-80 bg-white rounded-xl shadow-2xl border border-black/5 overflow-hidden flex flex-col transition-all duration-300">
-          <div className="bg-emerald-500 text-white p-3 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              <span className="font-semibold text-sm">Local Sandbox</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6 text-white hover:bg-white/20" 
-                onClick={() => resetMutation.mutate()} 
-                disabled={resetMutation.isPending || !workflowId}
-                title="Reset Chat"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </Button>
-              <Badge variant="secondary" className="text-[10px] bg-white/20 text-white border-0">TEST_MODE</Badge>
-            </div>
+        {/* CHAT WIDGET */}
+        <div className="absolute bottom-4 left-4 z-10 w-80 bg-white rounded-xl shadow-2xl border flex flex-col">
+          <div className="bg-emerald-500 text-white p-3 flex justify-between">
+            <div className="flex gap-2 items-center"><MessageSquare className="w-4 h-4" /><span className="font-semibold text-sm">Test Sandbox</span></div>
           </div>
-          <div className="h-64 overflow-y-auto p-3 flex flex-col gap-3 bg-emerald-50/30">
-            {chatHistory.length === 0 && (
-              <div className="text-xs text-center text-muted-foreground mt-10">Send a message to trigger your flow locally.</div>
-            )}
+          <div className="h-64 overflow-y-auto p-3 flex flex-col gap-3">
             {chatHistory.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${msg.role === 'user' ? 'bg-emerald-100 text-emerald-900 rounded-tr-sm' : 'bg-white border rounded-tl-sm text-slate-800'}`}>
-                  {msg.content}
-                </div>
+                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-emerald-100' : 'bg-slate-100'}`}>{msg.content}</div>
               </div>
             ))}
-            {isTesting && (
-              <div className="flex justify-start">
-                <div className="bg-white border rounded-2xl rounded-tl-sm px-4 py-2 shadow-sm flex gap-1">
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" />
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce delay-75" />
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce delay-150" />
-                </div>
-              </div>
-            )}
           </div>
-          <div className="p-2 bg-white border-t">
-            <form onSubmit={(e) => { e.preventDefault(); if(testInput.trim() && workflowId) testMutation.mutate({ text: testInput, history: chatHistory }); }} className="flex gap-2 relative">
-              <Input 
-                placeholder={!workflowId ? "Save workflow to enable..." : "Type a message..."} 
-                value={testInput} 
-                onChange={(e) => setTestInput(e.target.value)}
-                disabled={isTesting || !workflowId}
-                className="rounded-full pr-10 border-emerald-100 focus-visible:ring-emerald-500"
-              />
-              <Button type="submit" size="icon" className="absolute right-1 top-1 h-8 w-8 rounded-full bg-emerald-500 hover:bg-emerald-600" disabled={isTesting || !testInput.trim() || !workflowId}>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+          <div className="p-2 border-t">
+            <form onSubmit={(e) => { e.preventDefault(); testMutation.mutate({ text: testInput, history: chatHistory }); }} className="flex gap-2">
+              <Input placeholder="Type message..." value={testInput} onChange={(e) => setTestInput(e.target.value)} className="rounded-full" />
+              <Button type="submit" size="icon" className="rounded-full bg-emerald-500"><ArrowRight className="w-4 h-4" /></Button>
             </form>
           </div>
         </div>
       </div>
 
-      {/* RIGHT SIDEBAR - CONFIGURATION PANEL */}
+      {/* RIGHT SIDEBAR CONFIGURATION */}
       <div className={`w-80 bg-white border-l shadow-sm shrink-0 flex flex-col transition-transform duration-300 ${selectedNode ? 'translate-x-0' : 'translate-x-full absolute right-0 h-full'}`}>
         {selectedNode && (
           <>
-            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <Settings2 className="w-4 h-4" /> Node Settings
-              </h3>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedNode(null)}>
-                <X className="w-4 h-4" />
-              </Button>
+            <div className="p-4 border-b flex justify-between bg-slate-50 items-center">
+              <h3 className="font-semibold text-sm flex gap-2"><Settings2 className="w-4 h-4" /> Config</h3>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedNode(null)}><X className="w-4 h-4" /></Button>
             </div>
             
             <ScrollArea className="flex-1 p-4">
-              <div className="space-y-6">
-                
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Node Name</Label>
-                  <Input 
-                    value={(selectedNode.data as any)?.label || ""} 
-                    onChange={(e) => updateNodeData("label", e.target.value)} 
-                    placeholder="Enter a label..."
-                  />
+              <div className="space-y-5">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase text-muted-foreground">Node Label</Label>
+                  <Input value={(selectedNode.data as any)?.label || ""} onChange={(e) => updateNodeData("label", e.target.value)} />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Continue On Fail</Label>
+                  <Switch checked={(selectedNode.data as any)?.continueOnFail || false} onCheckedChange={(v) => updateNodeData("continueOnFail", v)} />
+                </div>
+
+                <div className="space-y-2 bg-slate-50 border p-3 rounded-lg">
+                  <Label className="text-xs uppercase text-muted-foreground flex gap-1 items-center"><Code className="w-3.5 h-3.5 text-indigo-500" /> Variable Helper</Label>
+                  <Select onValueChange={(val) => {
+                    navigator.clipboard.writeText(val);
+                    toast({ title: "Copied Expression", description: `Copied "${val}" to clipboard. Paste it in any input field.` });
+                  }}>
+                    <SelectTrigger className="bg-white text-xs h-8"><SelectValue placeholder="Select preceding variable to copy..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="{{ $json.payload }}">{"Trigger Webhook Payload ({{ $json.payload }})"}</SelectItem>
+                      {nodes.filter(n => n.id !== selectedNode.id).map(n => {
+                        const lbl = (n.data as any)?.label || n.type;
+                        return (
+                          <SelectItem key={n.id} value={`{{ $node['${lbl}'].json }}`}>{lbl} output (JSON)</SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <Separator />
 
+                {/* TRIGGER NODE CONFIG */}
                 {selectedNode.type === "triggerNode" && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="font-medium">Live Webhook Mode</Label>
-                      <Switch 
-                        checked={(selectedNode.data as any)?.isLive || false} 
-                        onCheckedChange={(v) => updateNodeData("isLive", v)}
-                      />
+                  <>
+                    <div className="space-y-1">
+                      <Label>Trigger Type</Label>
+                      <Select value={(selectedNode.data as any)?.triggerType || "webhook"} onValueChange={(v) => updateNodeData("triggerType", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="webhook">Webhook</SelectItem><SelectItem value="schedule">Schedule</SelectItem><SelectItem value="manual">Manual</SelectItem></SelectContent>
+                      </Select>
                     </div>
-                    <p className="text-xs text-muted-foreground">If disabled, this trigger will only accept messages from the Local Sandbox.</p>
-                  </div>
-                )}
-
-                {selectedNode.type === "aiNode" && (
-                  <Tabs defaultValue="knowledge" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-4">
-                      <TabsTrigger value="knowledge">Knowledge Base</TabsTrigger>
-                      <TabsTrigger value="config">AI Config</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="knowledge" className="space-y-5">
-                      <div className="space-y-2">
-                        <Label className="font-medium">Business Context & Instructions</Label>
-                        <p className="text-[10px] text-muted-foreground leading-tight">Describe the nature of your business and specific instructions for the agent.</p>
-                        <Textarea 
-                          className="min-h-[120px] text-xs font-mono" 
-                          placeholder="e.g., We are a real estate agency in Dubai..."
-                          value={(selectedNode.data as any)?.prompt || ""}
-                          onChange={(e) => updateNodeData("prompt", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="font-medium">Upload Documents</Label>
-                        <p className="text-[10px] text-muted-foreground leading-tight">Upload PDFs or CSVs for the AI to reference.</p>
-                        <Input type="file" className="text-xs" accept=".pdf,.csv,.txt" onChange={handleFileUpload} />
-                        {(selectedNode.data as any)?.fileName && (
-                          <div className="text-xs text-emerald-600 bg-emerald-50 p-2 rounded border border-emerald-100 flex items-center">
-                            <span className="truncate">Attached: {(selectedNode.data as any).fileName}</span>
-                          </div>
-                        )}
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="config" className="space-y-5">
-                      <div className="space-y-2">
-                        <Label className="font-medium text-amber-600">LLM API Key</Label>
-                        <Input 
-                          type="password"
-                          placeholder="sk-..."
-                          value={(selectedNode.data as any)?.llmConfig?.apiKey || ""}
-                          onChange={(e) => updateNodeData("llmConfig", { ...((selectedNode.data as any)?.llmConfig || {}), apiKey: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="font-medium">LLM Model</Label>
-                        <Select value={(selectedNode.data as any)?.llmConfig?.model || "gpt-4o"} onValueChange={(v) => updateNodeData("llmConfig", { ...((selectedNode.data as any)?.llmConfig || {}), model: v })}>
-                          <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="gpt-4o">GPT-4o (OpenAI)</SelectItem>
-                            <SelectItem value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</SelectItem>
-                            <SelectItem value="claude-3-5-sonnet">Claude 3.5 Sonnet</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <Label className="font-medium">Temperature</Label>
-                          <span className="text-xs text-muted-foreground">{(selectedNode.data as any)?.llmConfig?.temperature || 0.7}</span>
+                    {(selectedNode.data as any)?.triggerType === "webhook" && (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Webhook Path</Label>
+                          <Input placeholder="/my-webhook" value={(selectedNode.data as any)?.webhookPath || ""} onChange={(e) => updateNodeData("webhookPath", e.target.value)} />
                         </div>
-                        <Slider 
-                          min={0} max={1} step={0.1} 
-                          value={[(selectedNode.data as any)?.llmConfig?.temperature || 0.7]} 
-                          onValueChange={(v) => updateNodeData("llmConfig", { ...((selectedNode.data as any)?.llmConfig || {}), temperature: v[0] })} 
-                        />
+                        <div className="space-y-1">
+                          <Label>HTTP Method</Label>
+                          <Select value={(selectedNode.data as any)?.method || "POST"} onValueChange={(v) => updateNodeData("method", v)}>
+                            <SelectTrigger><SelectValue/></SelectTrigger>
+                            <SelectContent><SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem><SelectItem value="PUT">PUT</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1 mt-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                          <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+                          <div className="flex gap-2 items-center mt-1">
+                            <Input 
+                              readOnly 
+                              className="font-mono text-xs h-8 bg-white" 
+                              value={workflowId ? `${window.location.origin}/api/engine/run/${workflowId}` : "Save workflow to get URL"} 
+                            />
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8 px-2"
+                              disabled={!workflowId}
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/api/engine/run/${workflowId}`);
+                                toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+                              }}
+                            >
+                              Copy
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {(selectedNode.data as any)?.triggerType === "schedule" && (
+                      <div className="space-y-1">
+                        <Label>Cron Expression</Label>
+                        <Input placeholder="* * * * *" value={(selectedNode.data as any)?.cron || ""} onChange={(e) => updateNodeData("cron", e.target.value)} />
                       </div>
-                    </TabsContent>
-                  </Tabs>
+                    )}
+                  </>
                 )}
 
-                {selectedNode.type === "messageNode" && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-muted-foreground">This node automatically routes the generated `reply_text` from the AI back to the originating channel (WhatsApp or Sandbox).</p>
-                  </div>
+                {/* SWITCH NODE CONFIG */}
+                {selectedNode.type === "switchNode" && (
+                  <>
+                    <div className="space-y-4">
+                      <Label>Routing Rules</Label>
+                      {((selectedNode.data as any)?.rules || []).map((rule: any, i: number) => (
+                        <div key={i} className="flex gap-2 items-center bg-black/5 p-2 rounded-lg border border-black/10">
+                          <Input placeholder="{{ $json.val }}" value={rule.value1 || ""} onChange={(e) => {
+                            const newRules = [...((selectedNode.data as any)?.rules || [])];
+                            newRules[i] = { ...newRules[i], value1: e.target.value };
+                            updateNodeData("rules", newRules);
+                          }} className="w-1/3 text-xs" />
+                          <Select value={rule.operator || "==="} onValueChange={(v) => {
+                            const newRules = [...((selectedNode.data as any)?.rules || [])];
+                            newRules[i] = { ...newRules[i], operator: v };
+                            updateNodeData("rules", newRules);
+                          }}>
+                            <SelectTrigger className="w-24 text-xs"><SelectValue/></SelectTrigger>
+                            <SelectContent><SelectItem value="===">==</SelectItem><SelectItem value="!==">!=</SelectItem><SelectItem value=">">&gt;</SelectItem><SelectItem value="<">&lt;</SelectItem></SelectContent>
+                          </Select>
+                          <Input placeholder="match" value={rule.value2 || ""} onChange={(e) => {
+                            const newRules = [...((selectedNode.data as any)?.rules || [])];
+                            newRules[i] = { ...newRules[i], value2: e.target.value };
+                            updateNodeData("rules", newRules);
+                          }} className="w-1/3 text-xs" />
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500" onClick={() => {
+                            const newRules = [...((selectedNode.data as any)?.rules || [])];
+                            newRules.splice(i, 1);
+                            updateNodeData("rules", newRules);
+                          }}><Trash className="w-3 h-3"/></Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => {
+                        const newRules = [...((selectedNode.data as any)?.rules || [])];
+                        newRules.push({ value1: "", operator: "===", value2: "", handleName: `case_${newRules.length}` });
+                        updateNodeData("rules", newRules);
+                      }}>+ Add Rule</Button>
+                    </div>
+                  </>
                 )}
 
-                {selectedNode.type === "actionNode" && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label className="font-medium">Target DB Table</Label>
-                      <Select value={(selectedNode.data as any)?.targetTable || "crm_orders"} onValueChange={(v) => updateNodeData("targetTable", v)}>
-                        <SelectTrigger><SelectValue placeholder="Select table" /></SelectTrigger>
+                {/* ERROR NODE CONFIG */}
+                {selectedNode.type === "errorNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Catch Type</Label>
+                      <Select value={(selectedNode.data as any)?.catchType || "all"} onValueChange={(v) => updateNodeData("catchType", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="all">All Errors</SelectItem><SelectItem value="specific">Specific Error</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    {(selectedNode.data as any)?.catchType === "specific" && (
+                      <div className="space-y-1">
+                        <Label>Error Name (e.g. ValidationError)</Label>
+                        <Input placeholder="ValidationError" value={(selectedNode.data as any)?.errorName || ""} onChange={(e) => updateNodeData("errorName", e.target.value)} />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <Label>Fallback Payload (JSON)</Label>
+                      <Textarea placeholder='{"status": "recovered"}' className="font-mono text-xs h-24" value={typeof (selectedNode.data as any)?.fallback === "string" ? (selectedNode.data as any)?.fallback : JSON.stringify((selectedNode.data as any)?.fallback || {}, null, 2)} onChange={(e) => {
+                        try { updateNodeData("fallback", JSON.parse(e.target.value)); } catch(err) { updateNodeData("fallback", e.target.value); }
+                      }} />
+                    </div>
+                  </>
+                )}
+
+                {/* AI NODE CONFIG */}
+                {selectedNode.type === "aiNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Model Provider</Label>
+                      <Select value={(selectedNode.data as any)?.provider || "openai"} onValueChange={(v) => updateNodeData("provider", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="openai">OpenAI (GPT-4)</SelectItem><SelectItem value="anthropic">Anthropic (Claude)</SelectItem><SelectItem value="local">Local LLM</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Knowledge Base (RAG)</Label>
+                      <Select value={(selectedNode.data as any)?.knowledgeBaseId || "none"} onValueChange={(v) => updateNodeData("knowledgeBaseId", v)}>
+                        <SelectTrigger><SelectValue placeholder="Select Knowledge Base" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="crm_orders">crm_orders</SelectItem>
-                          <SelectItem value="crm_leads">crm_leads</SelectItem>
-                          <SelectItem value="crm_support_tickets">crm_support_tickets</SelectItem>
+                          <SelectItem value="none">None (Standard Prompt)</SelectItem>
+                          {knowledgeBases.map((kb: any) => (
+                            <SelectItem key={kb.id} value={kb.id}>{kb.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">The Engine will automatically insert the `extracted_entities` JSON from the AI Node into this table.</p>
-                  </div>
+                    <div className="space-y-1">
+                      <Label>System Message</Label>
+                      <Textarea placeholder="You are a helpful assistant..." className="font-mono text-xs h-24" value={(selectedNode.data as any)?.systemMessage || ""} onChange={(e) => updateNodeData("systemMessage", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>User Prompt</Label>
+                      <Textarea placeholder="Process this: {{ $json.text }}" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.prompt || ""} onChange={(e) => updateNodeData("prompt", e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+                {/* MESSAGE NODE CONFIG */}
+                {selectedNode.type === "messageNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Platform</Label>
+                      <Select value={(selectedNode.data as any)?.platform || "whatsapp"} onValueChange={(v) => updateNodeData("platform", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="telegram">Telegram</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Recipient (To)</Label>
+                      <Input placeholder="{{ $json.phone }}" value={(selectedNode.data as any)?.recipient || ""} onChange={(e) => updateNodeData("recipient", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Message Body</Label>
+                      <Textarea placeholder="Hello {{ $json.name }}!" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.messageBody || ""} onChange={(e) => updateNodeData("messageBody", e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+                {/* ACTION NODE CONFIG */}
+                {selectedNode.type === "actionNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Action Type</Label>
+                      <Select value={(selectedNode.data as any)?.actionType || "create_contact"} onValueChange={(v) => updateNodeData("actionType", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="create_contact">Create Contact</SelectItem><SelectItem value="update_contact">Update Contact</SelectItem><SelectItem value="create_order">Create Order</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Payload (JSON)</Label>
+                      <Textarea placeholder='{"name": "{{ $json.name }}"}' className="font-mono text-xs h-32" value={typeof (selectedNode.data as any)?.payload === "string" ? (selectedNode.data as any)?.payload : JSON.stringify((selectedNode.data as any)?.payload || {}, null, 2)} onChange={(e) => {
+                        try { updateNodeData("payload", JSON.parse(e.target.value)); } catch(err) { updateNodeData("payload", e.target.value); }
+                      }} />
+                    </div>
+                  </>
+                )}
+
+                {/* CRYPTO NODE CONFIG */}
+                {selectedNode.type === "cryptoNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Operation</Label>
+                      <Select value={(selectedNode.data as any)?.operation || "hash"} onValueChange={(v) => updateNodeData("operation", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="hash">Hash</SelectItem><SelectItem value="hmac">HMAC</SelectItem><SelectItem value="encrypt">Encrypt (AES)</SelectItem><SelectItem value="decrypt">Decrypt (AES)</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Algorithm (for Hash/HMAC)</Label>
+                      <Input placeholder="sha256" value={(selectedNode.data as any)?.algorithm || ""} onChange={(e) => updateNodeData("algorithm", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Data (Input string)</Label>
+                      <Input placeholder="{{ $json.payload }}" value={(selectedNode.data as any)?.data || ""} onChange={(e) => updateNodeData("data", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Secret Key</Label>
+                      <Input type="password" placeholder="super-secret-key" value={(selectedNode.data as any)?.secret || ""} onChange={(e) => updateNodeData("secret", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Output Property</Label>
+                      <Input placeholder="cryptoResult" value={(selectedNode.data as any)?.outputProperty || "cryptoResult"} onChange={(e) => updateNodeData("outputProperty", e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+                {/* COMPRESS NODE CONFIG */}
+                {selectedNode.type === "compressNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Operation</Label>
+                      <Select value={(selectedNode.data as any)?.operation || "compress"} onValueChange={(v) => updateNodeData("operation", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="compress">Compress to Zip</SelectItem><SelectItem value="extract">Extract Zip</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Input Binary Property</Label>
+                      <Input placeholder="data" value={(selectedNode.data as any)?.inputBinaryProperty || "data"} onChange={(e) => updateNodeData("inputBinaryProperty", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Target Binary Property</Label>
+                      <Input placeholder="data" value={(selectedNode.data as any)?.binaryPropertyName || "data"} onChange={(e) => updateNodeData("binaryPropertyName", e.target.value)} />
+                    </div>
+                    {((selectedNode.data as any)?.operation || "compress") === "compress" && (
+                      <div className="space-y-1">
+                        <Label>File Name</Label>
+                        <Input placeholder="archive.zip" value={(selectedNode.data as any)?.fileName || "archive.zip"} onChange={(e) => updateNodeData("fileName", e.target.value)} />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* FORMAT NODE CONFIG */}
+                {selectedNode.type === "formatNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Operation</Label>
+                      <Select value={(selectedNode.data as any)?.operation || "jsonToCsv"} onValueChange={(v) => updateNodeData("operation", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="jsonToCsv">JSON to CSV</SelectItem><SelectItem value="csvToJson">CSV to JSON</SelectItem><SelectItem value="base64Encode">Base64 Encode</SelectItem><SelectItem value="base64Decode">Base64 Decode</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Input Data</Label>
+                      <Textarea placeholder="{{ $json.items }}" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.data || ""} onChange={(e) => updateNodeData("data", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Output Property</Label>
+                      <Input placeholder="formattedResult" value={(selectedNode.data as any)?.outputProperty || "formattedResult"} onChange={(e) => updateNodeData("outputProperty", e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+
+                {/* HTTP NODE CONFIG */}
+                {selectedNode.type === "httpNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Method</Label>
+                      <Select value={(selectedNode.data as any)?.method || "GET"} onValueChange={(v) => updateNodeData("method", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem><SelectItem value="PUT">PUT</SelectItem><SelectItem value="DELETE">DELETE</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>URL</Label>
+                      <Input placeholder="https://api.example.com/data" value={(selectedNode.data as any)?.url || ""} onChange={(e) => updateNodeData("url", e.target.value)} />
+                      <p className="text-[10px] text-muted-foreground">Supports {'{{ $json.myVariable }}'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>JSON Body</Label>
+                      <Textarea placeholder='{"key": "{{ $json.value }}"}' className="font-mono text-xs h-24" value={typeof (selectedNode.data as any)?.body === "string" ? (selectedNode.data as any)?.body : JSON.stringify((selectedNode.data as any)?.body || {}, null, 2)} onChange={(e) => {
+                        try { updateNodeData("body", JSON.parse(e.target.value)); } catch(err) { updateNodeData("body", e.target.value); }
+                      }} />
+                    </div>
+                  </>
+                )}
+
+                {/* DB NODE CONFIG */}
+                {selectedNode.type === "databaseNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Raw SQL Query</Label>
+                      <Textarea placeholder="SELECT * FROM users WHERE id = $1" className="font-mono text-xs h-24" value={(selectedNode.data as any)?.rawQuery || ""} onChange={(e) => updateNodeData("rawQuery", e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+                {/* IF NODE CONFIG */}
+                {selectedNode.type === "ifNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Value 1</Label>
+                      <Input placeholder="{{ $json.status }}" value={(selectedNode.data as any)?.value1 || ""} onChange={(e) => updateNodeData("value1", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Operator</Label>
+                      <Select value={(selectedNode.data as any)?.operator || "==="} onValueChange={(v) => updateNodeData("operator", v)}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent><SelectItem value="===">Equals</SelectItem><SelectItem value="!==">Not Equals</SelectItem><SelectItem value=">">Greater Than</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Value 2</Label>
+                      <Input placeholder="active" value={(selectedNode.data as any)?.value2 || ""} onChange={(e) => updateNodeData("value2", e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+                {/* PHASE 2 NODES */}
+                {selectedNode.type === "codeNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>JavaScript Code</Label>
+                      <Textarea 
+                        placeholder="return { result: $json.value * 2 };" 
+                        className="font-mono text-xs h-40" 
+                        value={(selectedNode.data as any)?.code || ""} 
+                        onChange={(e) => updateNodeData("code", e.target.value)} 
+                      />
+                      <p className="text-[10px] text-muted-foreground">Access previous node data via <code>$json</code> and <code>$node['Node Name'].json</code></p>
+                    </div>
+                  </>
+                )}
+
+                {selectedNode.type === "loopNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Array Source (e.g., {'{{ $json.items }}'})</Label>
+                      <Input placeholder="{{ $json.items }}" value={(selectedNode.data as any)?.sourceArray || ""} onChange={(e) => updateNodeData("sourceArray", e.target.value)} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">Will emit each item out the "item" branch sequentially.</p>
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                      <p className="font-semibold flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Wiring Instructions:</p>
+                      <p>1. Connect <strong>"item"</strong> output to the start of your loop branch.</p>
+                      <p>2. Connect the output of the final node of your loop branch <strong>back to this Loop Node</strong> (creating a cycle).</p>
+                      <p>3. Connect <strong>"done"</strong> output to nodes executing after completion.</p>
+                    </div>
+                  </>
+                )}
+
+                {selectedNode.type === "waitNode" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Wait Duration</Label>
+                      <div className="flex gap-2">
+                        <Input type="number" placeholder="5" value={(selectedNode.data as any)?.duration || ""} onChange={(e) => updateNodeData("duration", e.target.value)} />
+                        <Select value={(selectedNode.data as any)?.unit || "seconds"} onValueChange={(v) => updateNodeData("unit", v)}>
+                          <SelectTrigger className="w-32"><SelectValue/></SelectTrigger>
+                          <SelectContent><SelectItem value="seconds">Seconds</SelectItem><SelectItem value="minutes">Minutes</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {selectedNode.type === "setNode" && (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <Label className="text-sm font-medium">Keep Only Set Values</Label>
+                      <Switch checked={(selectedNode.data as any)?.keepOnlySet || false} onCheckedChange={(v) => updateNodeData("keepOnlySet", v)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Values JSON array `[{'{"key":"val"}'}]`</Label>
+                      <Textarea 
+                        placeholder='[{"key": "my_field", "value": "{{ $json.some_field }}"}]' 
+                        className="font-mono text-xs h-32" 
+                        value={typeof (selectedNode.data as any)?.values === "string" ? (selectedNode.data as any)?.values : JSON.stringify((selectedNode.data as any)?.values || [], null, 2)} 
+                        onChange={(e) => {
+                          try { updateNodeData("values", JSON.parse(e.target.value)); } catch(err) { updateNodeData("values", e.target.value); }
+                        }} 
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div className="pt-4 border-t mt-auto space-y-2">
-                  <Button className="w-full" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                    <Save className="w-4 h-4 mr-2" /> {saveMutation.isPending ? "Saving..." : "Save Configuration"}
+                  <Button className="w-full bg-blue-500 hover:bg-blue-600" onClick={testSingleNode}>
+                    <Play className="w-4 h-4 mr-2" /> Test Step
                   </Button>
-                  <Button variant="destructive" className="w-full" onClick={() => {
-                    setNodes(nds => nds.filter(n => n.id !== selectedNode.id));
-                    setSelectedNode(null);
-                  }}>
+                  <Button variant="destructive" className="w-full" onClick={() => { setNodes(nds => nds.filter(n => n.id !== selectedNode.id)); setSelectedNode(null); }}>
                     <Trash className="w-4 h-4 mr-2" /> Delete Node
                   </Button>
                 </div>

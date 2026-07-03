@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, Users, MessageSquare, Send, Megaphone, Zap,
   ShoppingCart, BarChart3, Settings, LogOut, ChevronDown, Box,
-  Plus, Check, CircleDot,
+  Plus, Check, CircleDot, Book,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logoPath from "@assets/WA CRM favicon.webp";
@@ -30,6 +30,7 @@ const navItems = [
   { title: "Templates", url: "/templates", icon: Send },
   { title: "Campaigns", url: "/campaigns", icon: Megaphone },
   { title: "Automations", url: "/automations", icon: Zap },
+  { title: "Knowledge Base", url: "/knowledge", icon: Book },
   { title: "Pipeline", url: "/pipeline", icon: CircleDot },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },

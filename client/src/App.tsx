@@ -34,6 +34,7 @@ import Pipeline from "@/pages/pipeline";
 import Orders from "@/pages/orders";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
+import Knowledge from "@/pages/knowledge";
 
 function NotificationBell() {
   const { data: notifications = [] } = useQuery<Notification[]>({
@@ -139,6 +140,7 @@ function AuthenticatedApp() {
                   <Route path="/pipeline" component={Pipeline} />
                   <Route path="/orders" component={Orders} />
                   <Route path="/analytics" component={Analytics} />
+                  <Route path="/knowledge" component={Knowledge} />
                   <Route path="/settings" component={Settings} />
                   <Route component={NotFound} />
                 </Switch>

@@ -143,10 +143,11 @@ export class MessageNodeExecutor extends BaseNodeExecutor {
       return { status: "failed", error: "Message body is empty" };
     }
 
-    if (triggerData.conversation && isTestRun) {
+    const conversationId = triggerData.conversation?.id || context.$env.conversationId;
+    if (conversationId && isTestRun) {
       // Mock saving to DB for test runs if there's a conversation context
       await db.insert(messages).values({
-        conversationId: triggerData.conversation.id,
+        conversationId,
         content: messageBody,
         isFromContact: false,
       });

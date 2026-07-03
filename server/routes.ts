@@ -1486,19 +1486,31 @@ export async function registerRoutes(
 
       let testOutput = "";
       if (activeWorkflow) {
-        console.log(`[Sandbox Bubble] Triggering workflow ${activeWorkflow.id}`);
-        const payload = {
-          message: {
-            body: content,
-            from: "sandbox_test_phone",
-            from_name: "Sandbox Customer"
-          },
-          session: {
-            thread_id: conv.id,
-          }
-        };
-        const result = await executeWorkflow(activeWorkflow.id, payload, true);
-        testOutput = result.testOutput;
+        try {
+          console.log(`[Sandbox Bubble] Triggering workflow ${activeWorkflow.id}`);
+          const payload = {
+            message: {
+              body: content,
+              from: "sandbox_test_phone",
+              from_name: "Sandbox Customer"
+            },
+            session: {
+              thread_id: conv.id,
+            }
+          };
+          const result = await executeWorkflow(activeWorkflow.id, payload, true);
+          testOutput = result.testOutput;
+        } catch (wfError: any) {
+          console.error("[Sandbox Bubble Workflow Error]", wfError.message);
+          testOutput = `[Workflow Error] ${wfError.message}`;
+          
+          // Log it as a bot reply message in the history so they see it in the chat widget too!
+          await db.insert(messages).values({
+            conversationId: conv.id,
+            content: `Error running workflow: ${wfError.message}`,
+            isFromContact: false,
+          });
+        }
       }
 
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);

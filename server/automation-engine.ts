@@ -89,6 +89,7 @@ export async function executeWorkflow(
     $env: {
       containerId: wf.containerId,
       isTestRun: String(isTestRun),
+      conversationId: payload.session?.thread_id || "",
     }
   };
 

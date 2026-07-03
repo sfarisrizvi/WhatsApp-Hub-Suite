@@ -6,6 +6,7 @@ import { MessageSquare, X, Send, RotateCcw, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useWS } from "@/lib/ws-context";
 import { useContainer } from "@/lib/container-context";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatMessage {
   role: "user" | "bot";
@@ -21,6 +22,7 @@ export function SandboxBubble() {
   const { lastMessage } = useWS();
   const { activeContainer } = useContainer();
   const cid = activeContainer?.id;
+  const { toast } = useToast();
 
   // Load chat history
   const { data: historyData, isLoading } = useQuery<{ history: ChatMessage[] }>({
@@ -89,6 +91,11 @@ export function SandboxBubble() {
           "/api/containers", cid, "sandbox", "history"
         ], context?.previousHistory);
       }
+      toast({
+        variant: "destructive",
+        title: "Sandbox Error",
+        description: err.message,
+      });
     },
     onSuccess: (data) => {
       if (cid) {

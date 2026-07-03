@@ -35,14 +35,31 @@ export class DatabaseNodeExecutor extends BaseNodeExecutor {
         return { status: "failed", error: `Invalid or missing table name: ${tableName}` };
       }
 
+      const containerId = context.$env.containerId;
+      const isTenantTable = ["orders", "contacts", "deals"].includes(tableName);
+
+      // Auto-inject container_id to where conditions for tenant-specific tables to enforce multi-tenant isolation
+      const finalWhereConditions = [...whereConditions];
+      if (isTenantTable && containerId && !whereConditions.some((w: any) => w.column === "container_id" || w.column === "containerId")) {
+        finalWhereConditions.push({ column: "container_id", operator: "=", value: containerId });
+      }
+
       let sqlString = "";
       let values: any[] = [];
 
       if (operation === "insert") {
         if (fields.length === 0) return { status: "failed", error: "Insert requires at least one column-value pair." };
-        const keys = fields.map((f: any) => `"${f.column}"`).join(', ');
-        const placeholders = fields.map((_: any, i: number) => `$${i + 1}`).join(', ');
-        values = fields.map((f: any) => {
+        
+        // Auto-inject container_id on inserts if it is missing
+        const finalFields = [...fields];
+        if (isTenantTable && containerId && !fields.some((f: any) => f.column === "container_id" || f.column === "containerId")) {
+          finalFields.push({ column: "container_id", value: containerId });
+        }
+
+        const keys = finalFields.map((f: any) => `"${f.column}"`).join(', ');
+        const placeholders = finalFields.map((_: any, i: number) => `$${i + 1}`).join(', ');
+        
+        values = finalFields.map((f: any) => {
           let val = f.value;
           if (tableName === "orders" && (f.column === "items" || f.column === "metadata")) {
             if (typeof val === "string") {
@@ -65,8 +82,8 @@ export class DatabaseNodeExecutor extends BaseNodeExecutor {
       } 
       else if (operation === "select") {
         sqlString = `SELECT * FROM "${tableName}"`;
-        if (whereConditions.length > 0) {
-          const clauses = whereConditions.map((w: any) => {
+        if (finalWhereConditions.length > 0) {
+          const clauses = finalWhereConditions.map((w: any) => {
             values.push(w.value);
             const op = ["=", "!=", "<", ">", "<=", ">="].includes(w.operator) ? w.operator : "=";
             return `"${w.column}" ${op} $${values.length}`;
@@ -101,8 +118,8 @@ export class DatabaseNodeExecutor extends BaseNodeExecutor {
         }).join(", ");
         sqlString += setClauses;
 
-        if (whereConditions.length > 0) {
-          const clauses = whereConditions.map((w: any) => {
+        if (finalWhereConditions.length > 0) {
+          const clauses = finalWhereConditions.map((w: any) => {
             values.push(w.value);
             const op = ["=", "!=", "<", ">", "<=", ">="].includes(w.operator) ? w.operator : "=";
             return `"${w.column}" ${op} $${values.length}`;
@@ -113,8 +130,8 @@ export class DatabaseNodeExecutor extends BaseNodeExecutor {
       } 
       else if (operation === "delete") {
         sqlString = `DELETE FROM "${tableName}"`;
-        if (whereConditions.length > 0) {
-          const clauses = whereConditions.map((w: any) => {
+        if (finalWhereConditions.length > 0) {
+          const clauses = finalWhereConditions.map((w: any) => {
             values.push(w.value);
             const op = ["=", "!=", "<", ">", "<=", ">="].includes(w.operator) ? w.operator : "=";
             return `"${w.column}" ${op} $${values.length}`;

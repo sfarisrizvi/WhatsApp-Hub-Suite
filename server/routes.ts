@@ -1513,13 +1513,10 @@ export async function registerRoutes(
         }
       }
 
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const dbMessages = await db.query.messages.findMany({
-        where: and(
-          eq(messages.conversationId, conv.id),
-          gt(messages.createdAt, oneHourAgo)
-        ),
-        orderBy: (messages, { asc }) => [asc(messages.createdAt)]
+        where: eq(messages.conversationId, conv.id),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+        limit: 100
       });
 
       const history = dbMessages.map(msg => ({
@@ -1559,13 +1556,10 @@ export async function registerRoutes(
       });
       if (!conv) return res.json({ history: [] });
 
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const dbMessages = await db.query.messages.findMany({
-        where: and(
-          eq(messages.conversationId, conv.id),
-          gt(messages.createdAt, oneHourAgo)
-        ),
-        orderBy: (messages, { asc }) => [asc(messages.createdAt)]
+        where: eq(messages.conversationId, conv.id),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+        limit: 100
       });
 
       const history = dbMessages.map(msg => ({

@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-set timeout 60
+set timeout 90
 spawn ssh -p 65002 -o StrictHostKeyChecking=no u881780269@46.202.158.245
 expect {
   "password:" {
@@ -7,10 +7,13 @@ expect {
   }
 }
 expect "$ " {
-  send "cd domains/whatlify.com/nodejs && /opt/alt/alt-nodejs20/root/bin/node --import=tsx script/build.ts > build_output.log 2>&1\r"
+  send "cd domains/whatlify.com/nodejs && git reset --hard && git clean -fd && git pull origin main\r"
 }
 expect "$ " {
-  send "cat build_output.log\r"
+  send "/opt/alt/alt-nodejs20/root/bin/npm run build > build_output.log 2>&1\r"
+}
+expect "$ " {
+  send "cat build_output.log && echo 'Exit status:' $?\r"
 }
 expect "$ " {
   send "exit\r"

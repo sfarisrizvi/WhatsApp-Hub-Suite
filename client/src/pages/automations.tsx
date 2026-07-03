@@ -250,10 +250,6 @@ export default function Automations() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newWfName, setNewWfName] = useState("");
   
-  // Local Testing State
-  const [chatHistory, setChatHistory] = useState<{role: "user"|"bot", content: string}[]>([]);
-  const [testInput, setTestInput] = useState("");
-  const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null); // For single node test
 
   const { data: knowledgeBases = [] } = useQuery<any[]>({
@@ -308,24 +304,6 @@ export default function Automations() {
         setLocation(`/automations/${data.id}`);
       }
     }
-  });
-
-  const testMutation = useMutation({
-    mutationFn: async ({ text, history }: any) => {
-      if (!workflowId) throw new Error("Save workflow first.");
-      const res = await fetch(`/api/workflows/${workflowId}/test`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: { body: text, from_name: "Local Tester" }, session: {}, history })
-      });
-      if (!res.ok) throw new Error("Test execution failed");
-      return res.json();
-    },
-    onMutate: (vars) => { setIsTesting(true); setChatHistory(prev => [...prev, { role: "user", content: vars.text }]); setTestInput(""); },
-    onSuccess: (data) => {
-      if (data.history) setChatHistory(data.history);
-      setIsTesting(false);
-    },
-    onError: (err: any) => { setChatHistory(prev => [...prev, { role: "bot", content: `Error: ${err.message}` }]); setIsTesting(false); }
   });
 
   // Single Node Test Placeholder
@@ -764,25 +742,6 @@ export default function Automations() {
           <MiniMap className="rounded-lg shadow-md border-0" />
         </ReactFlow>
 
-        {/* CHAT WIDGET */}
-        <div className="absolute bottom-4 left-4 z-10 w-80 bg-white rounded-xl shadow-2xl border flex flex-col">
-          <div className="bg-emerald-500 text-white p-3 flex justify-between">
-            <div className="flex gap-2 items-center"><MessageSquare className="w-4 h-4" /><span className="font-semibold text-sm">Test Sandbox</span></div>
-          </div>
-          <div className="h-64 overflow-y-auto p-3 flex flex-col gap-3">
-            {chatHistory.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-emerald-100' : 'bg-slate-100'}`}>{msg.content}</div>
-              </div>
-            ))}
-          </div>
-          <div className="p-2 border-t">
-            <form onSubmit={(e) => { e.preventDefault(); testMutation.mutate({ text: testInput, history: chatHistory }); }} className="flex gap-2">
-              <Input placeholder="Type message..." value={testInput} onChange={(e) => setTestInput(e.target.value)} className="rounded-full" />
-              <Button type="submit" size="icon" className="rounded-full bg-emerald-500"><ArrowRight className="w-4 h-4" /></Button>
-            </form>
-          </div>
-        </div>
       </div>
 
       {/* RIGHT SIDEBAR CONFIGURATION */}

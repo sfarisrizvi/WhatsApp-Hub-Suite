@@ -42,7 +42,25 @@ export class DatabaseNodeExecutor extends BaseNodeExecutor {
         if (fields.length === 0) return { status: "failed", error: "Insert requires at least one column-value pair." };
         const keys = fields.map((f: any) => `"${f.column}"`).join(', ');
         const placeholders = fields.map((_: any, i: number) => `$${i + 1}`).join(', ');
-        values = fields.map((f: any) => f.value);
+        values = fields.map((f: any) => {
+          let val = f.value;
+          if (tableName === "orders" && (f.column === "items" || f.column === "metadata")) {
+            if (typeof val === "string") {
+              try {
+                JSON.parse(val);
+              } catch (e) {
+                if (f.column === "items") {
+                  val = JSON.stringify([val]);
+                } else {
+                  val = JSON.stringify({ value: val });
+                }
+              }
+            } else if (typeof val === "object" && val !== null) {
+              val = JSON.stringify(val);
+            }
+          }
+          return val;
+        });
         sqlString = `INSERT INTO "${tableName}" (${keys}) VALUES (${placeholders}) RETURNING *;`;
       } 
       else if (operation === "select") {
@@ -62,7 +80,23 @@ export class DatabaseNodeExecutor extends BaseNodeExecutor {
         sqlString = `UPDATE "${tableName}" SET `;
         
         const setClauses = fields.map((f: any) => {
-          values.push(f.value);
+          let val = f.value;
+          if (tableName === "orders" && (f.column === "items" || f.column === "metadata")) {
+            if (typeof val === "string") {
+              try {
+                JSON.parse(val);
+              } catch (e) {
+                if (f.column === "items") {
+                  val = JSON.stringify([val]);
+                } else {
+                  val = JSON.stringify({ value: val });
+                }
+              }
+            } else if (typeof val === "object" && val !== null) {
+              val = JSON.stringify(val);
+            }
+          }
+          values.push(val);
           return `"${f.column}" = $${values.length}`;
         }).join(", ");
         sqlString += setClauses;

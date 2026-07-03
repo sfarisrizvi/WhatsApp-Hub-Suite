@@ -967,20 +967,24 @@ export async function registerRoutes(
                       const endpoint = container.apiEndpoint || "https://graph.facebook.com/v18.0/";
                       const url = `${endpoint.replace(/\/$/, "")}/${container.phoneNumberId}/messages`;
                       
-                      await fetch(url, {
+                      const typingResponse = await fetch(url, {
                         method: "POST",
                         headers: { "Authorization": `Bearer ${container.apiKey}`, "Content-Type": "application/json" },
                         body: JSON.stringify({
                           messaging_product: "whatsapp",
-                          recipient_type: "individual",
-                          to: recipientPhone,
-                          type: "typing_indicator",
+                          status: "read",
+                          message_id: msg.id,
                           typing_indicator: {
-                            action: "typing_on"
+                            type: "text"
                           }
                         }),
                       });
-                      console.log(`[Webhook] Sent typing_on indicator to ${recipientPhone}`);
+                      if (!typingResponse.ok) {
+                        const errText = await typingResponse.text();
+                        console.warn(`[Webhook] Typing indicator failed: Status ${typingResponse.status} - ${errText}`);
+                      } else {
+                        console.log(`[Webhook] Sent typing_on indicator to ${recipientPhone} for message ${msg.id}`);
+                      }
                     } catch (typingErr: any) {
                       console.error("[Webhook] Failed to send typing indicator:", typingErr.message);
                     }

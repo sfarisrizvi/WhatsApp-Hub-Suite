@@ -1462,20 +1462,8 @@ export async function registerRoutes(
         }).returning();
       }
 
-      const newMessage = await storage.createMessage({
-        conversationId: conv.id,
-        content: content,
-        isFromContact: true,
-      });
-
-      await storage.updateConversation(conv.id, { lastMessageAt: new Date() });
-
-      broadcastToUser(userId, {
-        type: "new_message",
-        message: newMessage,
-        conversationId: conv.id,
-        containerId: container.id,
-      });
+      // NOTE: The trigger node inserts the user message into the DB during test runs.
+      // We do NOT insert here to avoid duplicate messages.
 
       const activeWorkflow = await db.query.workflows.findFirst({
         where: and(
@@ -1503,21 +1491,49 @@ export async function registerRoutes(
         } catch (wfError: any) {
           console.error("[Sandbox Bubble Workflow Error]", wfError.message);
           testOutput = `[Workflow Error] ${wfError.message}`;
-          
-          // Log it as a bot reply message in the history so they see it in the chat widget too!
           await db.insert(messages).values({
             conversationId: conv.id,
-            content: `Error running workflow: ${wfError.message}`,
+            content: `Workflow error: ${wfError.message}`,
             isFromContact: false,
           });
         }
+      } else {
+        // No active workflow — just insert user message manually so it shows in history
+        await db.insert(messages).values({
+          conversationId: conv.id,
+          content: content,
+          isFromContact: true,
+        });
+        testOutput = "(No active workflow found — message saved only)";
       }
 
+      // Re-fetch conversation after workflow so we get the definitive conversation ID.
+      // The trigger node does its own contact/conversation lookup, so we re-query to ensure alignment.
+      const finalContact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.containerId, container.id),
+          eq(contacts.phone, "sandbox_test_phone")
+        )
+      });
+      const finalConv = finalContact
+        ? await db.query.conversations.findFirst({
+            where: and(
+              eq(conversations.containerId, container.id),
+              eq(conversations.contactId, finalContact.id)
+            )
+          })
+        : null;
+
+      const queryConvId = finalConv?.id || conv.id;
+      console.log(`[Sandbox] Querying messages for convId=${queryConvId}`);
+
       const dbMessages = await db.query.messages.findMany({
-        where: eq(messages.conversationId, conv.id),
+        where: eq(messages.conversationId, queryConvId),
         orderBy: (messages, { asc }) => [asc(messages.createdAt)],
         limit: 100
       });
+
+      console.log(`[Sandbox] Found ${dbMessages.length} messages in conv ${queryConvId}`);
 
       const history = dbMessages.map(msg => ({
         role: msg.isFromContact ? "user" : "bot",

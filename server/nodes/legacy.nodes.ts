@@ -49,10 +49,10 @@ export class TriggerNodeExecutor extends BaseNodeExecutor {
           await db.insert(messages).values({ conversationId: conversation.id, content: messageBody, isFromContact: true });
         }
 
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         const dbMessages = await db.query.messages.findMany({
-          where: and(eq(messages.conversationId, conversation.id), gt(messages.createdAt, oneHourAgo)),
-          orderBy: (messages, { asc }) => [asc(messages.createdAt)]
+          where: eq(messages.conversationId, conversation.id),
+          orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+          limit: 50
         });
 
         const historyMessages = dbMessages.slice(0, Math.max(0, dbMessages.length - 1));

@@ -1,9 +1,0 @@
-#!/usr/bin/expect -f
-set timeout 30
-spawn scp -P 65002 -o StrictHostKeyChecking=no u881780269@46.202.158.245:/home/u881780269/domains/whatlify.com/nodejs/remote_tail.log scratch/remote_console.log
-expect {
-  "password:" {
-    send "qTtSzLzs2Q$\r"
-  }
-}
-expect eof

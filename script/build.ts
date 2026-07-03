@@ -1,6 +1,13 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile, writeFile } from "fs/promises";
+import os from "os";
+
+// Skip compilation on Hostinger due to partition noexec mount restrictions on esbuild/vite binaries.
+if (os.userInfo().username === "u881780269" || process.env.USER === "u881780269") {
+  console.log("Detected Hostinger server environment. Skipping build steps as pre-compiled dist is already committed.");
+  process.exit(0);
+}
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times

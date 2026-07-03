@@ -13,15 +13,24 @@ export class TriggerNodeExecutor extends BaseNodeExecutor {
     const { data, context, outgoingEdges } = args;
     const config = this.evaluateNodeData(data, context);
     
-    const payload = context.$json.payload || {};
+    // Payload can come from context.$json.payload OR directly as the top-level $json
+    const payload = context.$json.payload || context.$json || {};
     const isTestRun = context.$env.isTestRun === "true";
     const containerId = context.$env.containerId;
 
-    let outputData: any = { payload, triggerType: config.triggerType || "webhook" };
+    // Always expose message at top level so $json.message.body works in all subsequent nodes
+    const message = payload.message || {};
+    let outputData: any = { payload, message, triggerType: config.triggerType || "webhook" };
 
-    if (config.triggerType === "whatsapp_message" || (payload.message && payload.message.from)) {
+    // Trigger the WhatsApp branch if: explicitly configured, OR message.from is present, OR message.body is present (sandbox/test)
+    if (
+      config.triggerType === "whatsapp_message" ||
+      payload.message?.from ||
+      payload.message?.body
+    ) {
       // Legacy or WhatsApp explicit trigger: Resolve CRM Contact & Conversation
       if (containerId) {
+        // Fallback phone for sandbox/test runs that don't provide a real phone number
         let contactPhone = payload.message?.from || "sandbox_test_phone";
         let contactName = payload.message?.from_name || "Guest";
         
@@ -56,7 +65,15 @@ export class TriggerNodeExecutor extends BaseNodeExecutor {
         });
 
         const historyMessages = dbMessages.slice(0, Math.max(0, dbMessages.length - 1));
-        outputData = { ...outputData, contact, conversation, messageBody, historyMessages };
+        // Expose message at top level so $json.message.body is accessible from any subsequent node
+        outputData = { 
+          ...outputData, 
+          message,             // <- top-level so $json.message.body works
+          contact, 
+          conversation, 
+          messageBody,         // <- shorthand: $json.messageBody
+          historyMessages 
+        };
       }
     }
 
@@ -131,7 +148,19 @@ export class MessageNodeExecutor extends BaseNodeExecutor {
     const { data, context, outgoingEdges } = args;
     const config = this.evaluateNodeData(data, context);
     
-    const triggerData = context.$node["node_trigger"]?.json || context.$node["Trigger"]?.json || {};
+    // Find trigger node output by scanning all executed nodes for one that has a conversation/contact
+    // This avoids relying on hardcoded label names like 'Trigger' or 'node_trigger'
+    const triggerData = (() => {
+      // Try common label names first
+      const byLabel = context.$node["node_trigger"]?.json || context.$node["Trigger"]?.json;
+      if (byLabel?.conversation || byLabel?.contact) return byLabel;
+      // Scan all nodes for one that has a conversation object
+      for (const key of Object.keys(context.$node)) {
+        const json = context.$node[key]?.json;
+        if (json?.conversation?.id) return json;
+      }
+      return {};
+    })();
     const isTestRun = context.$env.isTestRun === "true";
     const containerId = context.$env.containerId;
 

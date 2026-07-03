@@ -84,7 +84,10 @@ export async function executeWorkflow(
 
   // 1. Initialize Context
   const context: ExpressionContext = resumeState?.context || {
-    $json: { payload }, // Dynamic payload data
+    $json: { 
+      payload,                          // Full payload at $json.payload
+      message: payload.message || {},   // Shortcut: $json.message.body works immediately
+    },
     $node: {},          // Output data of all executed nodes
     $env: {
       containerId: wf.containerId,

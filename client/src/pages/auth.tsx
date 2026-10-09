@@ -51,23 +51,46 @@ export default function AuthPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-center">
           <a href="/" className="flex items-center gap-2 group" data-testid="link-home">
-            <img src={logoPath} alt="WA CRM" className="h-10 w-10 rounded-lg shadow-md" />
-            <span className="text-xl font-bold">WA CRM</span>
+            <img src={logoPath} alt="Whatlify" className="h-10 w-10 rounded-lg shadow-md" />
+            <span className="text-xl font-bold">Whatlify</span>
           </a>
         </div>
 
-        <Card className="shadow-lg">
+        <Card className="shadow-lg border-white/[0.08]">
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-2xl" data-testid="text-auth-title">
               {mode === "login" ? "Welcome back" : "Create your account"}
             </CardTitle>
             <CardDescription>
               {mode === "login"
-                ? "Sign in to your WA CRM account"
-                : "Get started with WA CRM for free"}
+                ? "Sign in to your Whatlify account by AlQaim Digital"
+                : "Get started with Whatlify for free"}
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Meta Reviewer Quick-Fill Banner */}
+            {mode === "login" && (
+              <div className="mb-5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs flex items-center justify-between gap-2">
+                <div>
+                  <span className="font-semibold text-emerald-400 block">Meta App Reviewer?</span>
+                  <span className="text-muted-foreground text-[11px]">One-click test credentials</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                  onClick={() => {
+                    setEmail("meta-reviewer@whatlify.com");
+                    setPassword("ReviewPass2026!");
+                    toast({ title: "Meta Reviewer credentials filled!" });
+                  }}
+                >
+                  Fill Demo Login
+                </Button>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === "register" && (
                 <div className="grid grid-cols-2 gap-3">
@@ -177,10 +200,20 @@ export default function AuthPage() {
           </CardContent>
         </Card>
 
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <a href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground" data-testid="link-back-home">
             <ArrowLeft className="h-3 w-3" /> Back to home
           </a>
+          <div className="flex justify-center gap-3 text-xs text-muted-foreground">
+            <a href="/privacy" className="hover:underline">Privacy Policy</a>
+            <span>&bull;</span>
+            <a href="/terms" className="hover:underline">Terms of Service</a>
+            <span>&bull;</span>
+            <a href="/data-deletion" className="hover:underline">Data Deletion</a>
+          </div>
+          <p className="text-[11px] text-muted-foreground/70">
+            &copy; {new Date().getFullYear()} Whatlify by AlQaim Digital. All rights reserved.
+          </p>
         </div>
       </div>
     </div>

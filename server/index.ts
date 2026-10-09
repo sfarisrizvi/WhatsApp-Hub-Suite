@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { resumePausedWorkflows } from "./automation-engine";
+import { seedMetaReviewerAccount } from "./seed-reviewer";
 
 const app = express();
 const httpServer = createServer(app);
@@ -116,6 +117,11 @@ app.use((req, res, next) => {
         });
       }, 60 * 1000); // Check every 1 minute
       log("Background Worker for workflow_pauses started.");
+
+      // Ensure Meta Reviewer demo account exists
+      seedMetaReviewerAccount().catch(err => {
+        console.error("[Reviewer Seeder Error]", err);
+      });
     },
   );
 })();

@@ -49,7 +49,7 @@ export default function Dashboard() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
           <Zap className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-xl font-semibold" data-testid="text-no-workspace">Welcome to WA CRM</h2>
+        <h2 className="text-xl font-semibold" data-testid="text-no-workspace">Welcome to Whatlify</h2>
         <p className="text-muted-foreground text-center max-w-sm">
           Create your first workspace to start managing your WhatsApp Business communications.
         </p>

@@ -723,12 +723,15 @@ export default function Landing() {
               Whatlify
             </span>
           </div>
-          <p className="text-xs text-slate-500">
-            &copy; {new Date().getFullYear()} Whatlify. Built with WhatsApp Business API.
+          <p className="text-xs text-slate-500 text-center md:text-left">
+            &copy; {new Date().getFullYear()} Whatlify. Whatlify is a product owned and operated by AlQaim Digital. All rights reserved.
           </p>
-          <div className="flex gap-4">
-            <a href="/auth" className="text-xs text-slate-500 hover:text-slate-400 transition-colors">Privacy Policy</a>
-            <a href="/auth" className="text-xs text-slate-500 hover:text-slate-400 transition-colors">Terms of Service</a>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <a href="/privacy" className="text-xs text-slate-400 hover:text-emerald-400 transition-colors">Privacy Policy</a>
+            <span className="text-slate-700 text-xs">&bull;</span>
+            <a href="/terms" className="text-xs text-slate-400 hover:text-emerald-400 transition-colors">Terms of Service</a>
+            <span className="text-slate-700 text-xs">&bull;</span>
+            <a href="/data-deletion" className="text-xs text-slate-400 hover:text-emerald-400 transition-colors">Data Deletion</a>
           </div>
         </div>
       </footer>

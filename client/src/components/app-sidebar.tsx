@@ -63,9 +63,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <img src={logoPath} alt="WA CRM" className="h-8 w-8 rounded-md" />
+          <img src={logoPath} alt="Whatlify" className="h-8 w-8 rounded-md" />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold" data-testid="text-app-name">WA CRM</span>
+            <span className="text-sm font-semibold" data-testid="text-app-name">Whatlify</span>
             <span className="text-xs text-muted-foreground truncate max-w-[140px]" data-testid="text-business-name">
               {activeContainer?.businessName || activeContainer?.name || "Automation Platform"}
             </span>

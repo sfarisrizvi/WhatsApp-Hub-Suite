@@ -35,6 +35,9 @@ import Orders from "@/pages/orders";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Knowledge from "@/pages/knowledge";
+import PrivacyPolicy from "@/pages/privacy";
+import TermsOfService from "@/pages/terms";
+import DataDeletion from "@/pages/data-deletion";
 import { SandboxBubble } from "@/components/sandbox-bubble";
 
 function NotificationBell() {
@@ -170,16 +173,21 @@ function AppRouter() {
     );
   }
 
-  if (!user) {
-    return (
-      <Switch>
-        <Route path="/auth" component={AuthPage} />
+  return (
+    <Switch>
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/terms" component={TermsOfService} />
+      <Route path="/data-deletion" component={DataDeletion} />
+      <Route path="/auth">
+        {user ? <AuthenticatedApp /> : <AuthPage />}
+      </Route>
+      {user ? (
+        <Route><AuthenticatedApp /></Route>
+      ) : (
         <Route><Landing /></Route>
-      </Switch>
-    );
-  }
-
-  return <AuthenticatedApp />;
+      )}
+    </Switch>
+  );
 }
 
 function App() {

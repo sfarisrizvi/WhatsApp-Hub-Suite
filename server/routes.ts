@@ -1088,6 +1088,87 @@ export async function registerRoutes(
     }
   });
 
+  // Check Meta WABA Billing & Payment Method Status
+  app.get("/api/containers/:id/billing-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const container = await storage.getContainer(req.params.id);
+      if (!container) return res.status(404).json({ message: "Container not found" });
+
+      if (!container.isConfigured || !container.wabaId) {
+        return res.json({
+          configured: false,
+          isConfigured: false,
+          hasPaymentMethod: false,
+          message: "WhatsApp Business Account not connected yet",
+        });
+      }
+
+      // Handle mock/demo credentials gracefully
+      if (
+        container.wabaId.startsWith("demo_") ||
+        !container.apiKey ||
+        container.apiKey.startsWith("demo_")
+      ) {
+        return res.json({
+          configured: true,
+          isConfigured: true,
+          hasPaymentMethod: true,
+          currency: "USD",
+          accountReviewStatus: "APPROVED",
+          qualityRating: "GREEN",
+          phoneStatus: "CONNECTED",
+          isDemo: true,
+          billingUrl: "https://business.facebook.com/billing_hub/accounts",
+          billingDirectUrl: "https://business.facebook.com/billing_hub/accounts",
+        });
+      }
+
+      const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
+      
+      // Query WABA fields from Meta
+      const wabaUrl = `${endpoint}/${container.wabaId}?fields=id,name,currency,primary_funding_id,purchase_order_number,account_review_status`;
+      const wabaRes = await fetch(wabaUrl, {
+        headers: { Authorization: `Bearer ${container.apiKey}` },
+      });
+      const wabaData = await wabaRes.json();
+
+      let phoneData: any = {};
+      if (container.phoneNumberId) {
+        const phoneUrl = `${endpoint}/${container.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,status`;
+        const phoneRes = await fetch(phoneUrl, {
+          headers: { Authorization: `Bearer ${container.apiKey}` },
+        });
+        phoneData = await phoneRes.json();
+      }
+
+      const hasPaymentMethod = Boolean(wabaData.primary_funding_id || wabaData.purchase_order_number);
+      const accountReviewStatus = wabaData.account_review_status || "APPROVED";
+      const qualityRating = phoneData.quality_rating || "GREEN";
+      const phoneStatus = phoneData.status || "CONNECTED";
+      const currency = wabaData.currency || "USD";
+      const directBillingUrl = `https://business.facebook.com/billing_hub/payment_methods?business_id=${container.wabaId}`;
+
+      res.json({
+        configured: true,
+        isConfigured: true,
+        hasPaymentMethod,
+        primaryFundingId: wabaData.primary_funding_id || null,
+        currency,
+        accountReviewStatus,
+        qualityRating,
+        phoneStatus,
+        billingUrl: directBillingUrl,
+        billingDirectUrl: directBillingUrl,
+        wabaName: wabaData.name || container.businessName || container.name,
+        phoneNumber: phoneData.display_phone_number || container.phoneNumber,
+        error: wabaData.error?.message,
+      });
+    } catch (e: any) {
+      console.error("Billing status check error:", e.message);
+      res.status(500).json({ configured: false, hasPaymentMethod: false, error: e.message });
+    }
+  });
+
   app.get("/api/whatsapp/webhook-info", isAuthenticated, (req, res) => {
     const hostHeader = req.headers.host || req.headers["x-forwarded-host"];
     const baseUrl = hostHeader
@@ -1395,11 +1476,36 @@ export async function registerRoutes(
         });
       }
 
+      let hasPaymentMethod = false;
+      let primaryFundingId: string | null = null;
+      const billingDirectUrl = resolvedWabaId
+        ? `https://business.facebook.com/billing_hub/payment_methods?business_id=${resolvedWabaId}`
+        : "https://business.facebook.com/billing_hub/accounts";
+
+      if (resolvedWabaId) {
+        try {
+          const billingRes = await fetch(
+            `https://graph.facebook.com/v21.0/${resolvedWabaId}?fields=primary_funding_id,purchase_order_number`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (billingRes.ok) {
+            const bData = await billingRes.json();
+            primaryFundingId = bData.primary_funding_id || bData.purchase_order_number || null;
+            hasPaymentMethod = Boolean(primaryFundingId);
+          }
+        } catch (e: any) {
+          console.warn("Could not check payment status during embedded signup:", e.message);
+        }
+      }
+
       res.json({
         success: true,
         container,
         phoneNumber: phoneDisplay,
         verifiedName,
+        hasPaymentMethod,
+        primaryFundingId,
+        billingDirectUrl,
       });
     } catch (e: any) {
       console.error("Embedded signup error:", e.message);

@@ -28,6 +28,7 @@ import {
   Settings as SettingsIcon, User, Box, Users, Plus, Trash2, Shield,
   Phone, Globe, Key, CheckCircle, AlertCircle, ArrowRight, HelpCircle,
   Copy, ExternalLink, Loader2, Wifi, WifiOff, MessageSquare, ChevronDown, Unplug, Pencil, Check, UserPlus, X,
+  CreditCard, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import type { Container, ContainerMember } from "@shared/schema";
@@ -114,6 +115,21 @@ export default function Settings() {
   const { data: members = [] } = useQuery<ContainerMember[]>({
     queryKey: ["/api/containers", activeContainer?.id, "members"],
     enabled: !!activeContainer?.id,
+  });
+
+  const { data: billingStatus, refetch: refetchBilling, isFetching: fetchingBilling } = useQuery<{
+    isConfigured: boolean;
+    hasPaymentMethod: boolean;
+    primaryFundingId: string | null;
+    purchaseOrderNumber: string | null;
+    accountReviewStatus: string | null;
+    qualityRating: string | null;
+    phoneStatus: string | null;
+    billingDirectUrl: string;
+    message: string;
+  }>({
+    queryKey: ["/api/containers", activeContainer?.id, "billing-status"],
+    enabled: !!activeContainer?.id && !!activeContainer?.isConfigured,
   });
 
   const createContainerMutation = useMutation({
@@ -625,6 +641,99 @@ export default function Settings() {
                       <Unplug className="h-3.5 w-3.5 mr-1" /> Disconnect
                     </Button>
                   </div>
+                </div>
+
+                {/* WhatsApp Account Billing & Health Status Card */}
+                <div className="mt-4 p-4 rounded-lg border bg-card space-y-4" data-testid="card-billing-health">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                      <h4 className="font-semibold text-sm">WhatsApp Billing & Account Health</h4>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => refetchBilling()}
+                      disabled={fetchingBilling}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                      data-testid="button-refresh-billing-settings"
+                    >
+                      <RefreshCw className={`h-3 w-3 mr-1 ${fetchingBilling ? "animate-spin" : ""}`} />
+                      Refresh
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Payment Method Status */}
+                    <div className="p-3 rounded-md border bg-muted/30">
+                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Payment Method</p>
+                      {billingStatus?.hasPaymentMethod ? (
+                        <div className="flex items-center gap-1.5 mt-1 text-green-600 dark:text-green-400 font-medium text-sm">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>Card Attached</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 mt-1 text-amber-600 dark:text-amber-400 font-medium text-sm">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span>Action Required</span>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {billingStatus?.hasPaymentMethod
+                          ? "Ready for outbound messaging & broadcasts"
+                          : "Meta blocks outbound messages until card is attached"}
+                      </p>
+                    </div>
+
+                    {/* Account Review Status */}
+                    <div className="p-3 rounded-md border bg-muted/30">
+                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Account Status</p>
+                      <div className="flex items-center gap-1.5 mt-1 font-medium text-sm">
+                        <Badge variant="outline" className="capitalize text-xs font-medium">
+                          {billingStatus?.accountReviewStatus || "APPROVED"}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Meta WABA Policy Compliance
+                      </p>
+                    </div>
+
+                    {/* Phone Number Quality */}
+                    <div className="p-3 rounded-md border bg-muted/30">
+                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Quality Rating</p>
+                      <div className="flex items-center gap-1.5 mt-1 font-medium text-sm">
+                        <span className={`inline-block h-2.5 w-2.5 rounded-full ${
+                          billingStatus?.qualityRating === "RED"
+                            ? "bg-red-500"
+                            : billingStatus?.qualityRating === "YELLOW"
+                            ? "bg-amber-500"
+                            : "bg-green-500"
+                        }`} />
+                        <span className="capitalize">{billingStatus?.qualityRating || "High (Green)"}</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Messaging Tier Quality
+                      </p>
+                    </div>
+                  </div>
+
+                  {!billingStatus?.hasPaymentMethod && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-md bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        To send broadcasts or start conversations with customers, please add a credit or debit card to your WhatsApp account in Meta Business Manager.
+                      </p>
+                      <a
+                        href={billingStatus?.billingDirectUrl || (activeContainer.wabaId ? `https://business.facebook.com/billing_hub/payment_methods?business_id=${activeContainer.wabaId}` : "https://business.facebook.com/billing_hub/accounts")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0"
+                      >
+                        <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8">
+                          <CreditCard className="h-3.5 w-3.5 mr-1" /> Attach Card in Meta <ExternalLink className="h-3 w-3 ml-1" />
+                        </Button>
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

@@ -4,7 +4,8 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, MessageSquare, Megaphone, ShoppingCart, TrendingUp, Clock, Send, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, MessageSquare, Megaphone, ShoppingCart, TrendingUp, Clock, Send, Zap, AlertTriangle, CreditCard, RefreshCw, ExternalLink } from "lucide-react";
 import type { Contact, Campaign, Conversation, Order } from "@shared/schema";
 
 export default function Dashboard() {
@@ -30,6 +31,22 @@ export default function Dashboard() {
   const { data: orders = [] } = useQuery<Order[]>({
     queryKey: ["/api/containers", cid, "orders"],
     enabled: !!cid,
+  });
+
+  const { data: billingStatus, refetch: refetchBilling, isFetching: fetchingBilling } = useQuery<{
+    isConfigured: boolean;
+    hasPaymentMethod: boolean;
+    primaryFundingId: string | null;
+    purchaseOrderNumber: string | null;
+    accountReviewStatus: string | null;
+    qualityRating: string | null;
+    phoneStatus: string | null;
+    billingDirectUrl: string;
+    message: string;
+  }>({
+    queryKey: ["/api/containers", cid, "billing-status"],
+    enabled: !!cid && !!activeContainer?.isConfigured,
+    staleTime: 60 * 1000,
   });
 
   const isLoading = loadingContacts || loadingCampaigns || loadingConvos;
@@ -66,6 +83,59 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">{activeContainer.businessName || activeContainer.name} overview</p>
       </div>
+
+      {activeContainer?.isConfigured && billingStatus && !billingStatus.hasPaymentMethod && (
+        <Card className="border-amber-400 bg-amber-50/80 dark:bg-amber-950/30 p-4 shadow-sm" data-testid="banner-billing-warning">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                    Action Required: Add Payment Method in Meta
+                  </h3>
+                  <Badge variant="outline" className="text-amber-700 border-amber-300 dark:border-amber-700 dark:text-amber-300 text-[10px] font-normal">
+                    Meta Requirement
+                  </Badge>
+                </div>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-1 max-w-2xl leading-relaxed">
+                  Your WhatsApp Business Account does not have a credit/debit card attached. Meta will block outbound messages, campaigns, and broadcasts (Error #131031) until a payment method is linked.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchBilling()}
+                disabled={fetchingBilling}
+                className="text-xs h-8 bg-white/90 dark:bg-background border-amber-300 dark:border-amber-800"
+                data-testid="button-refresh-billing"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${fetchingBilling ? "animate-spin" : ""}`} />
+                Check Status
+              </Button>
+              <a
+                href={billingStatus.billingDirectUrl || "https://business.facebook.com/billing_hub/accounts"}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8"
+                  data-testid="button-attach-card"
+                >
+                  <CreditCard className="h-3.5 w-3.5 mr-1" />
+                  Attach Card in Meta
+                  <ExternalLink className="h-3 w-3 ml-1" />
+                </Button>
+              </a>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, i) => (

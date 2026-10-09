@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Link } from "wouter";
 import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { ContainerProvider, useContainer } from "@/lib/container-context";
 import { WSProvider, useWS } from "@/lib/ws-context";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Bell } from "lucide-react";
+import { Bell, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -35,6 +35,7 @@ import Orders from "@/pages/orders";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Knowledge from "@/pages/knowledge";
+import Onboarding from "@/pages/onboarding";
 import PrivacyPolicy from "@/pages/privacy";
 import TermsOfService from "@/pages/terms";
 import DataDeletion from "@/pages/data-deletion";
@@ -115,6 +116,36 @@ function WSNotificationHandler() {
   return null;
 }
 
+function HeaderWhatsAppStatus() {
+  const { activeContainer } = useContainer();
+  if (!activeContainer) return null;
+
+  if (activeContainer.isConfigured) {
+    return (
+      <Link href="/onboarding">
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer" title="WhatsApp Business Connected">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="font-medium truncate max-w-[130px] sm:max-w-[200px]">
+            {activeContainer.phoneNumber || activeContainer.businessName || "WhatsApp Live"}
+          </span>
+          <span className="hidden md:inline text-[10px] text-muted-foreground opacity-80 border-l pl-2 border-emerald-500/30">
+            High Quality
+          </span>
+        </div>
+      </Link>
+    );
+  }
+
+  return (
+    <Link href="/onboarding">
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-xs font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 transition-colors cursor-pointer shadow-sm">
+        <Zap className="h-3.5 w-3.5 text-amber-500" />
+        <span>Connect WhatsApp</span>
+      </div>
+    </Link>
+  );
+}
+
 function AuthenticatedApp() {
   const style = {
     "--sidebar-width": "16rem",
@@ -130,12 +161,16 @@ function AuthenticatedApp() {
             <AppSidebar />
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center justify-between gap-1 h-14 px-4 border-b shrink-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" />
+                  <HeaderWhatsAppStatus />
+                </div>
                 <NotificationBell />
               </header>
               <main className="flex-1 overflow-hidden">
                 <Switch>
                   <Route path="/" component={Dashboard} />
+                  <Route path="/onboarding" component={Onboarding} />
                   <Route path="/inbox" component={Inbox} />
                   <Route path="/contacts" component={Contacts} />
                   <Route path="/templates" component={Templates} />

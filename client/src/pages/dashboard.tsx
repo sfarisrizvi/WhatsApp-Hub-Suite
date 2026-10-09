@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useContainer } from "@/lib/container-context";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Users, MessageSquare, Megaphone, ShoppingCart, TrendingUp, Clock, Send, Zap, AlertTriangle, CreditCard, RefreshCw, ExternalLink } from "lucide-react";
+import { Users, MessageSquare, Megaphone, ShoppingCart, TrendingUp, Clock, Send, Zap, AlertTriangle, CreditCard, RefreshCw, ExternalLink, Sparkles } from "lucide-react";
 import type { Contact, Campaign, Conversation, Order } from "@shared/schema";
 
 export default function Dashboard() {
@@ -83,6 +83,37 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">{activeContainer.businessName || activeContainer.name} overview</p>
       </div>
+
+      {!activeContainer?.isConfigured && (
+        <Card className="border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground text-sm">
+                    Connect WhatsApp to Start Messaging
+                  </h3>
+                  <Badge className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-none text-[10px]">
+                    3-Min Setup
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+                  Your workspace is not connected to WhatsApp yet. Launch the zero-friction onboarding wizard to link your brand's number with official Meta Cloud API.
+                </p>
+              </div>
+            </div>
+            <Link href="/onboarding">
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0 shadow-sm font-semibold">
+                <Zap className="h-4 w-4" />
+                Launch Onboarding Wizard
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      )}
 
       {activeContainer?.isConfigured && billingStatus && !billingStatus.hasPaymentMethod && (
         <Card className="border-amber-400 bg-amber-50/80 dark:bg-amber-950/30 p-4 shadow-sm" data-testid="banner-billing-warning">

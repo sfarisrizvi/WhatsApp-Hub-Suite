@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useContainer } from "@/lib/container-context";
@@ -28,7 +28,7 @@ import {
   Settings as SettingsIcon, User, Box, Users, Plus, Trash2, Shield,
   Phone, Globe, Key, CheckCircle, AlertCircle, ArrowRight, HelpCircle,
   Copy, ExternalLink, Loader2, Wifi, WifiOff, MessageSquare, ChevronDown, Unplug, Pencil, Check, UserPlus, X,
-  CreditCard, RefreshCw, AlertTriangle,
+  CreditCard, RefreshCw, AlertTriangle, Sparkles,
 } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import type { Container, ContainerMember } from "@shared/schema";
@@ -740,20 +740,28 @@ export default function Settings() {
               <div className="mt-4 space-y-4">
                 <div className="p-4 rounded-lg border bg-muted/30">
                   <p className="text-sm mb-3">The fastest way to get started. Click below to sign in with Facebook, choose your Business Manager, and connect your WhatsApp number — all in one step.</p>
-                  <Button
-                    onClick={handleEmbeddedSignup}
-                    disabled={isConnecting}
-                    className="bg-[#1877F2] hover:bg-[#166FE5] text-white"
-                    size="lg"
-                    data-testid="button-connect-whatsapp"
-                  >
-                    {isConnecting ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <SiFacebook className="h-4 w-4 mr-2" />
-                    )}
-                    Connect with Facebook
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={handleEmbeddedSignup}
+                      disabled={isConnecting}
+                      className="bg-[#1877F2] hover:bg-[#166FE5] text-white"
+                      size="lg"
+                      data-testid="button-connect-whatsapp"
+                    >
+                      {isConnecting ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <SiFacebook className="h-4 w-4 mr-2" />
+                      )}
+                      Connect with Facebook
+                    </Button>
+                    <Link href="/onboarding">
+                      <Button variant="outline" size="lg" className="gap-2 font-semibold">
+                        <Sparkles className="h-4 w-4 text-emerald-500" />
+                        Dedicated Onboarding Wizard
+                      </Button>
+                    </Link>
+                  </div>
                   <p className="text-[10px] text-muted-foreground mt-2">You'll be asked to select a Business Portfolio, WhatsApp Business Account, and phone number.</p>
                 </div>
 

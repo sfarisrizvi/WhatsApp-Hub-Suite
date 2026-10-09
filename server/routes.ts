@@ -769,43 +769,56 @@ export async function registerRoutes(
 
       for (const entry of body.entry || []) {
         const wabaId = entry.id;
-        const [container] = await db.select().from(containers)
-          .where(eq(containers.wabaId, wabaId));
-
-        if (!container) {
-          console.warn("Webhook: no container found for wabaId:", wabaId);
-          continue;
-        }
-        console.log("Webhook: matched container", container.id, "for wabaId:", wabaId);
-
-        const signingSecret = container.appSecret || process.env.META_APP_SECRET;
-        if (signingSecret) {
-          if (!signature) {
-            console.warn("Webhook: missing x-hub-signature-256 header for container:", container.id, "— skipping");
-            continue;
-          }
-          const rawBody = (req as any).rawBody
-            ? Buffer.from((req as any).rawBody)
-            : Buffer.from(JSON.stringify(body));
-          const expected = "sha256=" + crypto
-            .createHmac("sha256", signingSecret)
-            .update(rawBody)
-            .digest("hex");
-          try {
-            if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-              console.warn("Webhook: signature mismatch for container:", container.id, "expected:", expected.slice(0, 20) + "...", "got:", (signature || "").slice(0, 20) + "...", "— skipping");
-              continue;
-            }
-          } catch (sigErr: any) {
-            console.warn("Webhook: signature validation error for container:", container.id, sigErr.message, "— skipping");
-            continue;
-          }
-          console.log("Webhook: signature verified for container:", container.id);
-        }
 
         for (const change of entry.changes || []) {
           if (change.field === "messages") {
             const value = change.value;
+            const recipientPhoneNumberId = value?.metadata?.phone_number_id;
+
+            // Route container: 1st by exact recipient phone_number_id, 2nd by wabaId
+            let container: any = null;
+            if (recipientPhoneNumberId) {
+              const [byPhone] = await db.select().from(containers)
+                .where(eq(containers.phoneNumberId, recipientPhoneNumberId));
+              if (byPhone) container = byPhone;
+            }
+
+            if (!container && wabaId) {
+              const [byWaba] = await db.select().from(containers)
+                .where(eq(containers.wabaId, wabaId));
+              if (byWaba) container = byWaba;
+            }
+
+            if (!container) {
+              console.warn("Webhook: no container found for phoneId:", recipientPhoneNumberId, "or wabaId:", wabaId);
+              continue;
+            }
+            console.log("Webhook: matched container", container.id, "for phoneId:", recipientPhoneNumberId, "wabaId:", wabaId);
+
+            const signingSecret = container.appSecret || process.env.META_APP_SECRET;
+            if (signingSecret) {
+              if (!signature) {
+                console.warn("Webhook: missing x-hub-signature-256 header for container:", container.id, "— skipping");
+                continue;
+              }
+              const rawBody = (req as any).rawBody
+                ? Buffer.from((req as any).rawBody)
+                : Buffer.from(JSON.stringify(body));
+              const expected = "sha256=" + crypto
+                .createHmac("sha256", signingSecret)
+                .update(rawBody)
+                .digest("hex");
+              try {
+                if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+                  console.warn("Webhook: signature mismatch for container:", container.id, "expected:", expected.slice(0, 20) + "...", "got:", (signature || "").slice(0, 20) + "...", "— skipping");
+                  continue;
+                }
+              } catch (sigErr: any) {
+                console.warn("Webhook: signature validation error for container:", container.id, sigErr.message, "— skipping");
+                continue;
+              }
+              console.log("Webhook: signature verified for container:", container.id);
+            }
 
             if (value?.statuses) {
               for (const status of value.statuses) {
@@ -1014,6 +1027,18 @@ export async function registerRoutes(
             const value = change.value;
             console.log("Webhook: template status update received:", JSON.stringify(value));
             
+            let container: any = null;
+            if (wabaId) {
+              const [byWaba] = await db.select().from(containers)
+                .where(eq(containers.wabaId, wabaId));
+              if (byWaba) container = byWaba;
+            }
+
+            if (!container) {
+              console.warn("Webhook: no container found for template update with wabaId:", wabaId);
+              continue;
+            }
+
             if (value?.message_template_name && value?.event) {
               const templateName = value.message_template_name;
               const metaStatus = value.event;
@@ -1124,11 +1149,12 @@ export async function registerRoutes(
       }
 
       const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
+      const authKey = process.env.META_SYSTEM_USER_TOKEN?.trim() || container.apiKey;
       
       // Query WABA fields from Meta
       const wabaUrl = `${endpoint}/${container.wabaId}?fields=id,name,currency,primary_funding_id,purchase_order_number,account_review_status`;
       const wabaRes = await fetch(wabaUrl, {
-        headers: { Authorization: `Bearer ${container.apiKey}` },
+        headers: { Authorization: `Bearer ${authKey}` },
       });
       const wabaData = await wabaRes.json();
 
@@ -1136,7 +1162,7 @@ export async function registerRoutes(
       if (container.phoneNumberId) {
         const phoneUrl = `${endpoint}/${container.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,status`;
         const phoneRes = await fetch(phoneUrl, {
-          headers: { Authorization: `Bearer ${container.apiKey}` },
+          headers: { Authorization: `Bearer ${authKey}` },
         });
         phoneData = await phoneRes.json();
       }
@@ -1450,8 +1476,13 @@ export async function registerRoutes(
         }
       }
 
+      // If Tech Provider permanent System User token is set in server environment, use it
+      // so client messaging never expires after 60 days
+      const permanentToken = process.env.META_SYSTEM_USER_TOKEN?.trim();
+      const effectiveApiKey = permanentToken || accessToken;
+
       const containerData: any = {
-        apiKey: accessToken,
+        apiKey: effectiveApiKey,
         apiEndpoint: "https://graph.facebook.com/v21.0/",
         webhookVerifyToken,
         isConfigured: true,
@@ -1486,7 +1517,7 @@ export async function registerRoutes(
         try {
           const billingRes = await fetch(
             `https://graph.facebook.com/v21.0/${resolvedWabaId}?fields=primary_funding_id,purchase_order_number`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+            { headers: { Authorization: `Bearer ${effectiveApiKey}` } }
           );
           if (billingRes.ok) {
             const bData = await billingRes.json();
@@ -1506,9 +1537,39 @@ export async function registerRoutes(
         hasPaymentMethod,
         primaryFundingId,
         billingDirectUrl,
+        isPermanentToken: Boolean(permanentToken),
       });
     } catch (e: any) {
       console.error("Embedded signup error:", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Generate hosted WhatsApp signup / onboarding link for a brand container
+  app.post("/api/containers/:id/generate-invite-link", isAuthenticated, async (req: any, res) => {
+    try {
+      const container = await storage.getContainer(req.params.id);
+      if (!container) return res.status(404).json({ message: "Container not found" });
+
+      const hostHeader = req.headers.host || req.headers["x-forwarded-host"];
+      const protocol = (req.headers["x-forwarded-proto"] as string) || "https";
+      const baseUrl = hostHeader ? `${protocol}://${hostHeader}` : "https://whatlify.com";
+
+      const appId = process.env.META_APP_ID || "";
+      const configId = process.env.META_CONFIG_ID || "";
+
+      const onboardingUrl = `${baseUrl}/onboarding?containerId=${container.id}`;
+      const metaHostedUrl = appId && configId
+        ? `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&config_id=${configId}&response_type=code&state=${container.id}`
+        : null;
+
+      res.json({
+        containerId: container.id,
+        containerName: container.name,
+        onboardingUrl,
+        metaHostedUrl,
+      });
+    } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });

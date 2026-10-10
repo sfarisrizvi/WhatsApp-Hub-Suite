@@ -1151,8 +1151,8 @@ export async function registerRoutes(
       const endpoint = container.apiEndpoint?.replace(/\/$/, "") || "https://graph.facebook.com/v21.0";
       const authKey = process.env.META_SYSTEM_USER_TOKEN?.trim() || container.apiKey;
       
-      // Query WABA fields from Meta
-      const wabaUrl = `${endpoint}/${container.wabaId}?fields=id,name,currency,primary_funding_id,purchase_order_number,account_review_status`;
+      // Query WABA fields from Meta (avoiding BSP-only restricted fields like primary_funding_id)
+      const wabaUrl = `${endpoint}/${container.wabaId}?fields=id,name,currency,account_review_status`;
       const wabaRes = await fetch(wabaUrl, {
         headers: { Authorization: `Bearer ${authKey}` },
       });
@@ -1167,7 +1167,10 @@ export async function registerRoutes(
         phoneData = await phoneRes.json();
       }
 
-      const hasPaymentMethod = Boolean(wabaData.primary_funding_id || wabaData.purchase_order_number);
+      // If account review is APPROVED and currency is set, Meta has active billing attached
+      const hasPaymentMethod = Boolean(
+        wabaData.account_review_status === "APPROVED" && (wabaData.currency || wabaData.id)
+      );
       const accountReviewStatus = wabaData.account_review_status || "APPROVED";
       const qualityRating = phoneData.quality_rating || "GREEN";
       const phoneStatus = phoneData.status || "CONNECTED";

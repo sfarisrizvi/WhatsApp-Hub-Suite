@@ -94,9 +94,14 @@ export function launchWhatsAppSignup(configId: string): Promise<EmbeddedSignupRe
         response_type: "code",
         override_default_response_type: true,
         extras: {
-          setup: {},
-          featureType: "",
-          sessionInfoVersion: "3",
+          version: "v4",
+          setup: {
+            business: { id: null, name: null, email: null, phone: { code: null, number: null }, website: null, address: { streetAddress1: null, streetAddress2: null, city: null, state: null, zipPostal: null, country: null }, timezone: null },
+            phone: { displayName: null, category: null, description: null },
+            preVerifiedPhone: { ids: null },
+            solutionID: null,
+            whatsAppBusinessAccount: { ids: null },
+          },
         },
       }
     );

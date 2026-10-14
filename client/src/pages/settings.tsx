@@ -31,27 +31,51 @@ import {
   CreditCard, RefreshCw, AlertTriangle, Sparkles,
 } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
-import type { Container, ContainerMember } from "@shared/schema";
+import { type Container, type ContainerMember, getContainerWebhookSlug } from "@shared/schema";
 import { loadFacebookSDK, launchWhatsAppSignup } from "@/lib/facebook-sdk";
 
 function WebhookInfoCard({ copyToClipboard }: { copyToClipboard: (text: string) => void }) {
-  const { data: webhookInfo } = useQuery<{ callbackUrl: string; verifyToken: string }>({
-    queryKey: ["/api/whatsapp/webhook-info"],
+  const { activeContainer } = useContainer();
+  const { data: webhookInfo } = useQuery<{ callbackUrl: string; verifyToken: string; webhookSlug?: string }>({
+    queryKey: ["/api/whatsapp/webhook-info", activeContainer?.id],
+    queryFn: async () => {
+      const url = activeContainer?.id ? `/api/whatsapp/webhook-info?containerId=${activeContainer.id}` : "/api/whatsapp/webhook-info";
+      const res = await fetch(url);
+      return res.json();
+    },
+    enabled: !!activeContainer,
   });
 
-  const callbackUrl = webhookInfo?.callbackUrl || `${window.location.origin}/api/webhook`;
-  const verifyToken = webhookInfo?.verifyToken || "";
+  const webhookSlug = activeContainer ? getContainerWebhookSlug(activeContainer) : "";
+  const callbackUrl = webhookInfo?.callbackUrl || (
+    activeContainer
+      ? `${window.location.origin}/api/webhook/${webhookSlug}`
+      : `${window.location.origin}/api/webhook`
+  );
+  const verifyToken = activeContainer?.webhookVerifyToken || webhookInfo?.verifyToken || "";
 
   return (
     <Card className="p-6">
-      <div className="flex items-center gap-2 mb-3">
-        <Globe className="h-5 w-5 text-[#25D366]" />
-        <h3 className="font-semibold">Webhook Configuration</h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Globe className="h-5 w-5 text-[#25D366]" />
+          <h3 className="font-semibold">Webhook Configuration</h3>
+        </div>
+        <Badge variant="outline" className="text-[11px] font-mono bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+          Dedicated Account URL
+        </Badge>
       </div>
-      <p className="text-xs text-muted-foreground mb-4">Use these values when configuring the webhook in your Meta App Dashboard.</p>
+      <p className="text-xs text-muted-foreground mb-4">
+        Each workspace has a unique dedicated webhook URL. Use these values when configuring your WhatsApp App in the Meta Developer Dashboard.
+      </p>
       <div className="space-y-3">
         <div>
-          <Label className="text-xs text-muted-foreground">Callback URL</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">Dedicated Callback URL</Label>
+            {webhookSlug && (
+              <span className="text-[10px] text-muted-foreground font-mono">slug: {webhookSlug}</span>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <code className="text-xs bg-muted px-2 py-1.5 rounded font-mono flex-1 truncate" data-testid="text-global-webhook-url">{callbackUrl}</code>
             <Button size="sm" variant="outline" onClick={() => copyToClipboard(callbackUrl)} data-testid="button-copy-global-webhook">
@@ -198,7 +222,10 @@ export default function Settings() {
 
   const initials = user ? `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U" : "U";
 
-  const webhookUrl = `${window.location.origin}/api/webhook`;
+  const webhookSlug = activeContainer ? getContainerWebhookSlug(activeContainer) : "";
+  const webhookUrl = activeContainer
+    ? `${window.location.origin}/api/webhook/${webhookSlug}`
+    : `${window.location.origin}/api/webhook`;
 
   const testConnection = async () => {
     if (!activeContainer) return;

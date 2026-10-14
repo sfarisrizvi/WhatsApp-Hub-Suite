@@ -101,27 +101,42 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  const host = process.env.HOST || "0.0.0.0";
-  httpServer.listen(
-    {
-      port,
-      host,
-    },
-    () => {
-      log(`serving on port ${port}`);
-      
-      // Start Background Worker for Paused Workflows
-      setInterval(() => {
-        resumePausedWorkflows().catch(err => {
-          console.error("[Background Worker Error]", err);
-        });
-      }, 60 * 1000); // Check every 1 minute
-      log("Background Worker for workflow_pauses started.");
+  const defaultHost = process.platform === "darwin" && port === 5000 ? "127.0.0.1" : "0.0.0.0";
+  const host = process.env.HOST || defaultHost;
 
-      // Ensure Meta Reviewer demo account exists
-      seedMetaReviewerAccount().catch(err => {
-        console.error("[Reviewer Seeder Error]", err);
-      });
-    },
-  );
+  const startServer = (targetHost: string) => {
+    httpServer.listen(
+      {
+        port,
+        host: targetHost,
+      },
+      () => {
+        log(`serving on http://${targetHost}:${port}`);
+        
+        // Start Background Worker for Paused Workflows
+        setInterval(() => {
+          resumePausedWorkflows().catch(err => {
+            console.error("[Background Worker Error]", err);
+          });
+        }, 60 * 1000); // Check every 1 minute
+        log("Background Worker for workflow_pauses started.");
+
+        // Ensure Meta Reviewer demo account exists
+        seedMetaReviewerAccount().catch(err => {
+          console.error("[Reviewer Seeder Error]", err);
+        });
+      },
+    );
+  };
+
+  httpServer.once("error", (err: any) => {
+    if (err.code === "EADDRINUSE" && host === "0.0.0.0") {
+      log(`Port ${port} in use on 0.0.0.0, falling back to 127.0.0.1...`);
+      startServer("127.0.0.1");
+    } else {
+      console.error("Server listen error:", err);
+    }
+  });
+
+  startServer(host);
 })();

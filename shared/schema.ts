@@ -432,3 +432,19 @@ export type KnowledgeDocument = typeof knowledgeDocuments.$inferSelect;
 export type InsertKnowledgeDocument = typeof knowledgeDocuments.$inferInsert;
 export type KnowledgeChunk = typeof knowledgeChunks.$inferSelect;
 export type InsertKnowledgeChunk = typeof knowledgeChunks.$inferInsert;
+
+export function slugifyWebhookName(text: string): string {
+  return (text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function getContainerWebhookSlug(container: { id: string; name?: string | null; businessName?: string | null }): string {
+  if (!container || !container.id) return "default";
+  const baseName = container.businessName || container.name || "account";
+  const slug = slugifyWebhookName(baseName);
+  const shortId = container.id.replace(/-/g, "").slice(0, 8);
+  return slug ? `${slug}-${shortId}` : shortId || container.id;
+}

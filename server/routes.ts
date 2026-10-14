@@ -7,12 +7,60 @@ import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { seedDatabase } from "./seed";
-import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs, knowledgeBases, knowledgeDocuments } from "@shared/schema";
+import { containers, users, contacts, campaigns, messages, conversations, deals, orders, workflows, workflowRuns, workflowNodeLogs, knowledgeBases, knowledgeDocuments, getContainerWebhookSlug, slugifyWebhookName } from "@shared/schema";
 import { db, dbEvents } from "./db";
 import { eq, and, sql, gt, inArray } from "drizzle-orm";
 import { executeWorkflow } from "./automation-engine";
 import multer from "multer";
 import { processDocument } from "./knowledge-engine";
+
+export async function findContainerByIdentifier(identifier: string) {
+  if (!identifier) return null;
+  const clean = identifier.trim().toLowerCase();
+
+  // 1. Direct UUID lookup (case-insensitive)
+  try {
+    const [byId] = await db.select().from(containers)
+      .where(sql`LOWER(${containers.id}) = ${clean}`);
+    if (byId) return byId;
+  } catch {
+    // Ignore format errors
+  }
+
+  // 2. Fetch all containers to match against slugs, short IDs, and names
+  const all = await db.select().from(containers);
+
+  // Exact generated slug match (e.g. quick-bot-39608396)
+  const bySlug = all.find(c => getContainerWebhookSlug(c).toLowerCase() === clean);
+  if (bySlug) return bySlug;
+
+  // Short ID match (e.g. 39608396 or identifier ending with -39608396)
+  const byShortId = all.find(c => {
+    const rawShort = c.id.replace(/-/g, "").toLowerCase().slice(0, 8);
+    const uuidShort = c.id.toLowerCase().slice(0, 8);
+    return clean === rawShort || clean === uuidShort || clean.endsWith(`-${rawShort}`) || clean.endsWith(`-${uuidShort}`);
+  });
+  if (byShortId) return byShortId;
+
+  // Name or business name slug match
+  const byName = all.find(c => 
+    c.name.toLowerCase() === clean || 
+    (c.businessName && c.businessName.toLowerCase() === clean) ||
+    slugifyWebhookName(c.name) === clean ||
+    (c.businessName && slugifyWebhookName(c.businessName) === clean)
+  );
+  if (byName) return byName;
+
+  // WABA ID, Phone ID, or token match
+  const byMetaField = all.find(c => 
+    c.wabaId === identifier || 
+    c.phoneNumberId === identifier || 
+    c.webhookVerifyToken === identifier
+  );
+  if (byMetaField) return byMetaField;
+
+  return null;
+}
 
 const upload = multer({ storage: multer.memoryStorage() });
 // Mock requireAuth if not provided
@@ -728,21 +776,40 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  // WhatsApp Webhook Verification (GET)
-  app.get("/api/webhook", async (req, res) => {
+  // WhatsApp Webhook Verification Handler (GET)
+  const handleWebhookGet = async (req: any, res: any, identifier?: string) => {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
 
-    console.log("Webhook verification attempt:", { mode, token: token ? `${String(token).slice(0, 8)}...` : "none", challenge: challenge ? "present" : "missing" });
+    console.log("Webhook verification attempt:", { 
+      identifier: identifier || "global",
+      mode, 
+      token: token ? `${String(token).slice(0, 8)}...` : "none", 
+      challenge: challenge ? "present" : "missing" 
+    });
 
     if (mode === "subscribe" && token) {
       const globalToken = process.env.WEBHOOK_VERIFY_TOKEN;
+
+      // 1. If an account identifier was supplied in the URL, verify target container
+      if (identifier) {
+        const container = await findContainerByIdentifier(identifier);
+        if (container) {
+          if (token === container.webhookVerifyToken || (globalToken && token === globalToken)) {
+            console.log(`Webhook verified for container: ${container.id} (${identifier})`);
+            return res.status(200).send(challenge);
+          }
+        }
+      }
+
+      // 2. Global token match
       if (globalToken && token === globalToken) {
         console.log("Webhook verified with global verify token");
         return res.status(200).send(challenge);
       }
 
+      // 3. Fallback across all containers
       const allContainers = await db.select().from(containers);
       const match = allContainers.find(c => c.webhookVerifyToken === token);
       if (match) {
@@ -752,19 +819,31 @@ export async function registerRoutes(
     }
     console.log("Webhook verification failed — token mismatch");
     res.status(403).send("Forbidden");
-  });
+  };
 
-  // WhatsApp Webhook Incoming Messages (POST)
-  app.post("/api/webhook", async (req, res) => {
+  app.get("/api/webhook", async (req, res) => handleWebhookGet(req, res));
+  app.get("/api/webhook/:identifier", async (req, res) => handleWebhookGet(req, res, req.params.identifier));
+
+  // WhatsApp Webhook Incoming Messages Handler (POST)
+  const handleWebhookPost = async (req: any, res: any, identifier?: string) => {
     try {
       const signature = req.headers["x-hub-signature-256"] as string | undefined;
       const body = req.body;
 
-      console.log("Webhook POST received:", { object: body.object, entries: body.entry?.length || 0 });
+      console.log("Webhook POST received:", { 
+        identifier: identifier || "global",
+        object: body.object, 
+        entries: body.entry?.length || 0 
+      });
 
       if (body.object !== "whatsapp_business_account") {
         console.log("Webhook rejected: invalid object type:", body.object);
         return res.status(400).json({ message: "Invalid object type" });
+      }
+
+      const urlContainer = identifier ? await findContainerByIdentifier(identifier) : null;
+      if (urlContainer) {
+        console.log("Webhook routed directly to container:", urlContainer.id, `(${identifier})`);
       }
 
       for (const entry of body.entry || []) {
@@ -775,9 +854,9 @@ export async function registerRoutes(
             const value = change.value;
             const recipientPhoneNumberId = value?.metadata?.phone_number_id;
 
-            // Route container: 1st by exact recipient phone_number_id, 2nd by wabaId
-            let container: any = null;
-            if (recipientPhoneNumberId) {
+            // Route container: 1st by URL identifier, 2nd by exact recipient phone_number_id, 3rd by wabaId
+            let container: any = urlContainer;
+            if (!container && recipientPhoneNumberId) {
               const [byPhone] = await db.select().from(containers)
                 .where(eq(containers.phoneNumberId, recipientPhoneNumberId));
               if (byPhone) container = byPhone;
@@ -790,10 +869,10 @@ export async function registerRoutes(
             }
 
             if (!container) {
-              console.warn("Webhook: no container found for phoneId:", recipientPhoneNumberId, "or wabaId:", wabaId);
+              console.warn("Webhook: no container found for identifier:", identifier, "phoneId:", recipientPhoneNumberId, "or wabaId:", wabaId);
               continue;
             }
-            console.log("Webhook: matched container", container.id, "for phoneId:", recipientPhoneNumberId, "wabaId:", wabaId);
+            console.log("Webhook: matched container", container.id, "for identifier:", identifier, "phoneId:", recipientPhoneNumberId, "wabaId:", wabaId);
 
             const signingSecret = container.appSecret || process.env.META_APP_SECRET;
             if (signingSecret) {
@@ -1027,15 +1106,15 @@ export async function registerRoutes(
             const value = change.value;
             console.log("Webhook: template status update received:", JSON.stringify(value));
             
-            let container: any = null;
-            if (wabaId) {
+            let container: any = urlContainer;
+            if (!container && wabaId) {
               const [byWaba] = await db.select().from(containers)
                 .where(eq(containers.wabaId, wabaId));
               if (byWaba) container = byWaba;
             }
 
             if (!container) {
-              console.warn("Webhook: no container found for template update with wabaId:", wabaId);
+              console.warn("Webhook: no container found for template update with identifier:", identifier, "wabaId:", wabaId);
               continue;
             }
 
@@ -1085,7 +1164,10 @@ export async function registerRoutes(
       console.error("Webhook processing error:", e.message, e.stack);
       res.status(200).json({ status: "ok" });
     }
-  });
+  };
+
+  app.post("/api/webhook", async (req, res) => handleWebhookPost(req, res));
+  app.post("/api/webhook/:identifier", async (req, res) => handleWebhookPost(req, res, req.params.identifier));
 
   // Test WhatsApp API connection
   app.post("/api/containers/:id/test-connection", isAuthenticated, async (req: any, res) => {
@@ -1198,16 +1280,28 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/whatsapp/webhook-info", isAuthenticated, (req, res) => {
+  app.get("/api/whatsapp/webhook-info", isAuthenticated, async (req, res) => {
     const hostHeader = req.headers.host || req.headers["x-forwarded-host"];
+    const protocol = (req.headers["x-forwarded-proto"] as string) || (req.secure ? "https" : "http");
     const baseUrl = hostHeader
-      ? `https://${hostHeader}`
+      ? `${protocol}://${hostHeader}`
       : process.env.REPLIT_DEV_DOMAIN
         ? `https://${process.env.REPLIT_DEV_DOMAIN}`
         : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-    const callbackUrl = `${baseUrl}/api/webhook`;
-    const verifyToken = process.env.WEBHOOK_VERIFY_TOKEN || "";
-    res.json({ callbackUrl, verifyToken });
+
+    const containerId = req.query.containerId as string | undefined;
+    let container = containerId ? await findContainerByIdentifier(containerId) : null;
+    if (!container && req.session.userId) {
+      const userContainers = await storage.getContainersByUser(req.session.userId);
+      if (userContainers && userContainers.length > 0) {
+        container = userContainers[0];
+      }
+    }
+
+    const webhookSlug = container ? getContainerWebhookSlug(container) : "";
+    const callbackUrl = webhookSlug ? `${baseUrl}/api/webhook/${webhookSlug}` : `${baseUrl}/api/webhook`;
+    const verifyToken = container?.webhookVerifyToken || process.env.WEBHOOK_VERIFY_TOKEN || "";
+    res.json({ callbackUrl, verifyToken, webhookSlug, containerId: container?.id });
   });
 
   // WhatsApp Embedded Signup - public config endpoint
@@ -1451,14 +1545,17 @@ export async function registerRoutes(
         }
       }
 
-      const webhookVerifyToken = process.env.WEBHOOK_VERIFY_TOKEN || crypto.randomBytes(16).toString("hex");
+      let targetContainer = containerId ? await db.select().from(containers).where(eq(containers.id, containerId)).then(r => r[0]) : null;
+      const webhookSlug = targetContainer ? getContainerWebhookSlug(targetContainer) : "";
+      const webhookVerifyToken = targetContainer?.webhookVerifyToken || process.env.WEBHOOK_VERIFY_TOKEN || crypto.randomBytes(16).toString("hex");
       const hostHeader = req.headers.host || req.headers["x-forwarded-host"];
+      const protocol = (req.headers["x-forwarded-proto"] as string) || (req.secure ? "https" : "http");
       const baseUrl = hostHeader
-        ? `https://${hostHeader}`
+        ? `${protocol}://${hostHeader}`
         : process.env.REPLIT_DEV_DOMAIN
           ? `https://${process.env.REPLIT_DEV_DOMAIN}`
           : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-      const webhookUrl = `${baseUrl}/api/webhook`;
+      const webhookUrl = webhookSlug ? `${baseUrl}/api/webhook/${webhookSlug}` : `${baseUrl}/api/webhook`;
       console.log("Registering webhook URL:", webhookUrl);
 
       if (resolvedWabaId) {

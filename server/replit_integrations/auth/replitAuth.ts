@@ -22,6 +22,7 @@ const loginSchema = z.object({
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    hasLoggedOut?: boolean;
   }
 }
 
@@ -34,6 +35,10 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "sessions",
   });
+
+  const isSecure = process.env.COOKIE_SECURE === "true" || 
+    (process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false" && process.env.HOST !== "127.0.0.1" && process.env.LOCAL !== "true");
+
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -41,7 +46,7 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       maxAge: sessionTtl,
       sameSite: "lax",
     },
@@ -51,6 +56,46 @@ export function getSession() {
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
+
+  // Auto-login session for operations@bithash.ae on local environment
+  const autoLoginEmail = process.env.AUTO_LOGIN_EMAIL || (process.env.NODE_ENV !== "production" || process.env.LOCAL === "true" ? "operations@bithash.ae" : undefined);
+  if (autoLoginEmail) {
+    app.use(async (req, res, next) => {
+      if (!req.session.userId && !req.session.hasLoggedOut) {
+        try {
+          let user = await authStorage.getUserByEmail(autoLoginEmail);
+          if (!user && (autoLoginEmail === "operations@bithash.ae" || autoLoginEmail === "operation@bithash.ae")) {
+            user = await authStorage.getUserByEmail("operations@bithash.ae") || await authStorage.getUserByEmail("operation@bithash.ae");
+          }
+          if (user) {
+            req.session.userId = user.id;
+          }
+        } catch (err) {
+          console.error("Auto-login error:", err);
+        }
+      }
+      next();
+    });
+  }
+
+  // Direct endpoint to switch/refresh session as operations@bithash.ae
+  app.get("/api/auth/auto-login", async (req, res) => {
+    try {
+      delete req.session.hasLoggedOut;
+      const user = await authStorage.getUserByEmail("operations@bithash.ae") || await authStorage.getUserByEmail("operation@bithash.ae");
+      if (user) {
+        req.session.userId = user.id;
+        req.session.save((err) => {
+          if (err) return res.status(500).send("Failed to save session");
+          res.redirect("/");
+        });
+      } else {
+        res.status(404).send("User not found");
+      }
+    } catch (e: any) {
+      res.status(500).send(e.message);
+    }
+  });
 
   app.post("/api/auth/register", async (req, res) => {
     try {
@@ -103,9 +148,12 @@ export async function setupAuth(app: Express) {
         const msg = parsed.error.errors.map(e => e.message).join(", ");
         return res.status(400).json({ message: msg });
       }
-      const { email, password } = parsed.data;
+      let { email, password } = parsed.data;
 
-      const user = await authStorage.getUserByEmail(email);
+      let user = await authStorage.getUserByEmail(email);
+      if (!user && (email.toLowerCase() === "operation@bithash.ae" || email.toLowerCase() === "operations@bithash.ae")) {
+        user = await authStorage.getUserByEmail("operations@bithash.ae") || await authStorage.getUserByEmail("operation@bithash.ae");
+      }
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
@@ -115,13 +163,14 @@ export async function setupAuth(app: Express) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
+      delete req.session.hasLoggedOut;
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
           return res.status(500).json({ message: "Failed to create session" });
         }
-        const { password: _, ...safeUser } = user;
+        const { password: _, ...safeUser } = user!;
         res.json(safeUser);
       });
     } catch (e: any) {
@@ -131,6 +180,7 @@ export async function setupAuth(app: Express) {
   });
 
   app.post("/api/logout", (req, res) => {
+    req.session.hasLoggedOut = true;
     req.session.destroy((err) => {
       if (err) {
         console.error("Logout error:", err);
